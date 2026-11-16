@@ -33,6 +33,20 @@ real profile until you save. Closing the live copy quits it and deletes the copy
 The copy shows a robot icon and striped address bar (Firefox's remote-control mode),
 and while it's open, other programs on your computer could also control it.
 
+**Agents (MCP)**: gnash ships an MCP server, so an AI agent can edit the files with you.
+Its edits land in your gnash editor as unsaved drafts and apply in the live copy at once;
+it can also search prefs, open pages in the copy, and take screenshots to see what it
+did. You keep it with ⌘S (or ask the agent to save).
+
+```sh
+claude mcp add gnash -- node /path/to/gnash/apps/server/src/mcp.ts
+```
+
+The MCP server finds the running gnash through `~/.gnash/session.json` (owner-only;
+it holds the session token), and starts gnash if it isn't running. Tools: `status`,
+`read_file`, `write_file`, `edit_file`, `save_file`, `search_prefs`, `live`,
+`open_page`, `screenshot`.
+
 **Customize**: sliders, toggles and choosers for about 30 curated prefs (density,
 interface scale, vertical tabs, fonts, colors, scrolling, tab behavior, sponsored
 stuff), next to a simulated Firefox window that updates as you drag. Curated controls

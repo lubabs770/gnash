@@ -552,13 +552,14 @@ function setLiveUi(on, busyText) {
 async function goLive() {
   if (!state.id) return;
   setLiveUi(false, "Opening live copy…");
+  state.goingLive = true;
   try {
     await api(`/api/profiles/${state.id}/live`, {});
     await enterLive(false);
   } catch (e) {
     setLiveUi(false);
     toast(e.message);
-  }
+  } finally { state.goingLive = false; }
 }
 
 async function enterLive(resumed) {
@@ -892,6 +893,7 @@ async function discard() {
 
 const FILE_LABEL = { userJs: "user.js", userChrome: "userChrome.css", userContent: "userContent.css" };
 const STYLESHEETS_PREF = "toolkit.legacyUserProfileCustomizations.stylesheets";
+const CLIENT = Math.random().toString(36).slice(2); // tells our own draft events apart from an agent's
 const studio = { files: null, cur: "userJs", sync: {}, syncTimer: 0, shotBusy: false, shotAgain: false, shot: "", es: null, names: [], ac: null };
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 const span = (cls, s) => `<span class="${cls}">${esc(s)}</span>`;
@@ -900,7 +902,7 @@ const ta = () => $("#edTa");
 async function loadFiles() {
   if (!state.id) return;
   const files = await api(`/api/profiles/${state.id}/files`);
-  studio.files = Object.fromEntries(Object.entries(files).map(([k, f]) => [k, { text: f.text, base: f.text, hash: f.hash, dirty: false, disk: null }]));
+  studio.files = Object.fromEntries(Object.entries(files).map(([k, f]) => [k, { text: f.draft ?? f.text, base: f.text, hash: f.hash, dirty: f.draft !== undefined, disk: null }]));
   studio.sync = {};
   studio.names = [...new Set([...state.data.rows.map((r) => r.name), ...state.controls.map((c) => c.pref)])].sort();
   renderStudio(true);
@@ -922,6 +924,37 @@ function openEvents() {
     renderStudio(true);
     if (state.live) requestShot();
     if (d.file === "userJs") reload().catch(() => {});
+  });
+  es.addEventListener("draft", (ev) => {
+    const d = JSON.parse(ev.data);
+    const f = studio.files?.[d.file];
+    if (!f || d.client === CLIENT) return;
+    f.text = d.text;
+    f.dirty = f.text !== f.base;
+    if (d.sync && !d.sync.error) studio.sync[d.file] = d.sync;
+    if (d.client === "agent") {
+      studio.cur = d.file; // follow the agent to the file it's changing
+      if (Date.now() - (studio.agentToast ?? 0) > 6000) { studio.agentToast = Date.now(); toast(`An agent edited ${FILE_LABEL[d.file]}. Review it, then ⌘S to keep it.`); }
+    }
+    renderStudio(true);
+    if (state.live) { flashLive(); requestShot(); }
+  });
+  es.addEventListener("saved", (ev) => {
+    const d = JSON.parse(ev.data);
+    const f = studio.files?.[d.file];
+    if (!f) return;
+    Object.assign(f, { base: d.text, hash: d.hash, disk: null });
+    f.dirty = f.text !== f.base;
+    renderStudio(true);
+    if (d.file === "userJs") reload().catch(() => {});
+  });
+  es.addEventListener("live", (ev) => {
+    const d = JSON.parse(ev.data);
+    if (d.active && !state.live && !state.goingLive) enterLive(true).then(requestShot);
+    else if (!d.active && state.live) {
+      state.live = false; studio.sync = {}; studio.shot = "";
+      setLiveUi(false); renderNotices(); renderAll();
+    }
   });
 }
 
@@ -1069,17 +1102,18 @@ function onEdInput() {
 }
 
 function scheduleSync(delay = 300, key = studio.cur) {
-  if (!state.live) return;
   clearTimeout(studio.syncTimer);
   studio.syncTimer = setTimeout(() => syncNow(key), delay);
 }
 
+/** Share the editor text as a draft (agents read it too); the server applies it live when Live is on. */
 async function syncNow(key) {
   try {
-    studio.sync[key] = await api("/api/live/sync", { file: key, text: studio.files[key].text });
-    flashLive();
+    const r = await api(`/api/profiles/${state.id}/draft`, { file: key, text: studio.files[key].text, client: CLIENT });
+    if (r.sync?.error) toast(r.sync.error);
+    else if (r.sync) studio.sync[key] = r.sync;
+    if (state.live) { flashLive(); requestShot(); }
     if (key === studio.cur) { renderEditorLayer(); $("#edStatus").replaceChildren(statusLine()); }
-    requestShot();
   } catch (e) { liveFailed(e); }
 }
 

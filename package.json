@@ -13,7 +13,8 @@
     "start": "node apps/server/src/main.ts",
     "dev": "node --watch apps/server/src/main.ts --no-open",
     "test": "node --test \"packages/*/src/**/*.test.ts\" \"apps/*/src/**/*.test.ts\"",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "mcp": "node apps/server/src/mcp.ts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

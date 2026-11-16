@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { createApp } from "./app.ts";
 import { stopCurrent } from "./live.ts";
+import { removeSession, writeSession } from "./session.ts";
 
 const IDLE_MS = 10 * 60_000; // the UI pings every 30s while a tab is open
 
@@ -14,6 +15,7 @@ const server = createApp({ token, onActivity: () => (lastActivity = Date.now()) 
 server.listen(0, "127.0.0.1", () => {
   const { port } = server.address() as AddressInfo;
   const url = `http://127.0.0.1:${port}/?token=${token}`;
+  void writeSession({ port, token, pid: process.pid });
   console.log(`gnash is running. If your browser didn't open, visit:\n  ${url}\nPress Ctrl-C to stop.`);
   if (!process.argv.includes("--no-open")) openBrowser(url);
 });
@@ -38,6 +40,7 @@ function openBrowser(url: string): void {
 /** Undo live changes that weren't saved, then exit. */
 async function shutdown(): Promise<void> {
   await Promise.race([stopCurrent(), new Promise((r) => setTimeout(r, 5000))]);
+  await removeSession(process.pid);
   process.exit(0);
 }
 process.on("SIGINT", () => void shutdown());

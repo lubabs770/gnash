@@ -85,6 +85,10 @@ export function createApp(opts: AppOptions): Server {
 
   // Server-Sent Events: one profile watcher per profile while any tab listens.
   const listeners = new Map<string, { watcher: ProfileWatcher; clients: Set<ServerResponse> }>();
+  /** Unsaved edits per profile+file, from the gnash editor or an agent; what "the current text" means. */
+  const drafts = new Map<string, string>();
+  /** Profile most recently opened in a gnash tab; agents default to it. */
+  let focusProfile: string | null = null;
 
   function broadcast(profileId: string, event: string, data: unknown): void {
     for (const c of listeners.get(profileId)?.clients ?? []) c.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -120,6 +124,7 @@ export function createApp(opts: AppOptions): Server {
       await watcher.start();
     }
     entry.clients.add(res);
+    focusProfile = p.id;
     const beat = setInterval(() => (res.write(": beat\n\n"), opts.onActivity?.()), 25_000);
     req.on("close", () => {
       clearInterval(beat);
@@ -139,8 +144,8 @@ export function createApp(opts: AppOptions): Server {
   }
 
   async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
-    const m = /^\/api\/profiles\/([0-9a-f]{12})(?:\/(preview|apply|live|files|files\/save|events))?$/.exec(url.pathname);
-    const liveCmd = /^\/api\/live\/(read|set|revert|keep|stop|sync)$/.exec(url.pathname)?.[1];
+    const m = /^\/api\/profiles\/([0-9a-f]{12})(?:\/(preview|apply|live|files|files\/save|events|draft))?$/.exec(url.pathname);
+    const liveCmd = /^\/api\/live\/(read|set|revert|keep|stop|open)$/.exec(url.pathname)?.[1];
     if (req.method === "GET" && url.pathname === "/") {
       const nonce = randomBytes(16).toString("base64");
       const html = (await readFile(INDEX_HTML, "utf8")).replaceAll("<script>", `<script nonce="${nonce}">`);
@@ -156,6 +161,10 @@ export function createApp(opts: AppOptions): Server {
       send(res, 200, { ok: true });
     } else if (req.method === "GET" && url.pathname === "/api/controls") {
       send(res, 200, CONTROLS);
+    } else if (req.method === "GET" && url.pathname === "/api/state") {
+      const s = liveSession(false);
+      const profiles = (await getProfiles()).map(({ id, name, isDefault, version }) => ({ id, name, isDefault, version }));
+      send(res, 200, { profiles, focus: focusProfile, live: s ? { active: true, profileId: s.profileId } : { active: false } });
     } else if (req.method === "GET" && url.pathname === "/api/live") {
       const s = liveSession(false);
       send(res, 200, s ? { active: true, profileId: s.profileId, touched: [...s.originals.keys()] } : { active: false });
@@ -172,6 +181,12 @@ export function createApp(opts: AppOptions): Server {
         started.primeUserJs(files.userJs.text);
         await started.syncCss("chrome", files.userChrome.text);
         await started.syncCss("content", files.userContent.text);
+        // Unsaved drafts are what the user is looking at, so the copy shows those.
+        for (const key of ["userJs", "userChrome", "userContent"] as const) {
+          const d = drafts.get(`${p.id}:${key}`);
+          if (d !== undefined) await syncLive(p.id, key, d);
+        }
+        broadcast(p.id, "live", { active: true });
       }
       send(res, 200, { active: true, profileId: p.id });
     } else if (req.method === "GET" && url.pathname === "/api/live/screenshot") {
@@ -179,7 +194,30 @@ export function createApp(opts: AppOptions): Server {
     } else if (req.method === "GET" && m?.[2] === "events") {
       await openEvents(req, res, await findProfile(m[1]!));
     } else if (req.method === "GET" && m?.[2] === "files") {
-      send(res, 200, await readFiles((await findProfile(m[1]!)).dir));
+      const p = await findProfile(m[1]!);
+      const files = await readFiles(p.dir);
+      const out: Record<string, FileState & { draft?: string }> = {};
+      for (const [k, f] of Object.entries(files)) out[k] = { ...f, draft: drafts.get(`${p.id}:${k}`) };
+      send(res, 200, out);
+    } else if (req.method === "POST" && m?.[2] === "draft") {
+      const body = await readJson(req);
+      const p = await findProfile(m[1]!);
+      if (!isFileKey(body.file) || typeof body.text !== "string" || body.text.length > 2_000_000) {
+        throw new HttpError(400, "expected file and text");
+      }
+      const key = `${p.id}:${body.file}`;
+      if (body.text === (await readFiles(p.dir))[body.file].text) drafts.delete(key);
+      else drafts.set(key, body.text);
+      let sync: unknown = null;
+      try {
+        sync = await syncLive(p.id, body.file, body.text);
+      } catch (e) {
+        if (!(e instanceof live.LiveError)) throw e;
+        sync = { error: e.message };
+      }
+      const client = typeof body.client === "string" ? body.client.slice(0, 64) : "";
+      broadcast(p.id, "draft", { file: body.file, text: body.text, client, sync });
+      send(res, 200, { sync, unsaved: drafts.has(key) });
     } else if (req.method === "POST" && m?.[2] === "files/save") {
       const body = await readJson(req);
       const p = await findProfile(m[1]!);
@@ -188,19 +226,22 @@ export function createApp(opts: AppOptions): Server {
       }
       const saved = await saveFile(p.dir, body.file, body.text, body.hash);
       listeners.get(p.id)?.watcher.note(body.file, saved.hash);
+      drafts.delete(`${p.id}:${body.file}`);
+      broadcast(p.id, "saved", { file: body.file, text: body.text, hash: saved.hash });
       send(res, 200, saved);
     } else if (req.method === "POST" && liveCmd) {
       const body = await readJson(req);
       if (liveCmd === "stop") {
+        const was = liveSession(false)?.profileId;
         await live.stopCurrent();
+        if (was) broadcast(was, "live", { active: false });
         return send(res, 200, { active: false });
       }
       const s = liveSession(true)!;
-      if (liveCmd === "sync") {
-        if (!isFileKey(body.file) || typeof body.text !== "string" || body.text.length > 2_000_000) {
-          throw new HttpError(400, "expected file and text");
-        }
-        send(res, 200, await syncLive(s.profileId, body.file, body.text));
+      if (liveCmd === "open") {
+        if (typeof body.url !== "string" || !/^(https?:\/\/|about:)/.test(body.url)) throw new HttpError(400, "url must be http(s) or about:");
+        await s.navigate(body.url);
+        send(res, 200, { ok: true });
       } else if (liveCmd === "set") {
         const [c] = validateChanges([{ name: body.name, value: body.value }]);
         await s.set(c!.name, c!.value);

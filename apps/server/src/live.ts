@@ -1,7 +1,7 @@
 // Live mode: drive a scratch copy of the profile in a real Firefox through Marionette
 // (its remote-control protocol), so prefs and CSS changes show up immediately.
 import { spawn } from "node:child_process";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -264,6 +264,16 @@ export class LiveSession {
     if (prev) await rm(prev, { force: true });
   }
 
+  /** Load a page in the copy's current tab (to try userContent.css on a real site). */
+  async navigate(url: string): Promise<void> {
+    await this.m.command("Marionette:SetContext", { value: "content" });
+    try {
+      await this.m.command("WebDriver:Navigate", { url });
+    } finally {
+      await this.m.command("Marionette:SetContext", { value: "chrome" });
+    }
+  }
+
   /** PNG (base64) of the front browser window, chrome included. */
   async screenshot(): Promise<string> {
     const r = (await this.m.command("WebDriver:TakeScreenshot", { full: false })) as { value: string };
@@ -326,6 +336,9 @@ export async function makeScratchProfile(p: Profile): Promise<string> {
       if (e.code !== "ENOENT") throw e;
     });
   }
+  // Port 0: Firefox picks a free port and writes it to MarionetteActivePort, so several live
+  // copies (or another Marionette user) never fight over the default 2828.
+  await appendFile(join(scratch, "user.js"), `\nuser_pref("marionette.port", 0);\n`);
   return scratch;
 }
 

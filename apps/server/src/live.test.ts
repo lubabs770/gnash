@@ -184,7 +184,8 @@ describe("makeScratchProfile", () => {
     await writeFile(join(dir, "cookies.sqlite"), "private");
     const id = "abcdef012345";
     const scratch = await makeScratchProfile({ id, browser: "Firefox", name: "t", dir, isDefault: false, installDirs: [] });
-    assert.deepEqual((await readdir(scratch)).sort(), ["chrome", "prefs.js", "xulstore.json"]);
+    assert.deepEqual((await readdir(scratch)).sort(), ["chrome", "prefs.js", "user.js", "xulstore.json"]);
+    assert.match(readFileSync(join(scratch, "user.js"), "utf8"), /user_pref\("marionette.port", 0\);/);
     assert.deepEqual(await readdir(join(scratch, "chrome")), ["img"]);
     await rm(scratch, { recursive: true, force: true });
   });
