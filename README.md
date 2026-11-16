@@ -18,3 +18,7 @@ npm test
   loopback-only server with session token.
 - **v0.2**: Windows, Linux, Flatpak, Snap, forks; single executables from CI (Node SEA).
 - **v0.3**: pref descriptions bundle built in CI.
+
+## License
+
+MIT
