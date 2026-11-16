@@ -52,8 +52,10 @@ export function unifiedDiff(before: string, after: string, label: string, contex
     const hunk = all.slice(start, Math.min(all.length, last + context + 1));
     const prior = all.slice(0, start);
     const count = (xs: Op[], skip: Op["t"]) => xs.filter((o) => o.t !== skip).length;
+    // Unified diff numbers an empty side by the line before it (0 at file start).
+    const start1 = (p: Op[], h: Op[], skip: Op["t"]) => count(p, skip) + (count(h, skip) ? 1 : 0);
     out.push(
-      `@@ -${count(prior, "+") + 1},${count(hunk, "+")} +${count(prior, "-") + 1},${count(hunk, "-")} @@`,
+      `@@ -${start1(prior, hunk, "+")},${count(hunk, "+")} +${start1(prior, hunk, "-")},${count(hunk, "-")} @@`,
       ...hunk.map((o) => o.t + o.s),
     );
   }

@@ -166,3 +166,7 @@ describe("http security", () => {
     assert.ok(!res.headers.has("access-control-allow-origin"));
   });
 });
+
+test("diff of a new file uses -0,0", () => {
+  assert.match(unifiedDiff("", "a\n", "f"), /^@@ -0,0 \+1,1 @@$/m);
+});

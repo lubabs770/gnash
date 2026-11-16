@@ -5,6 +5,8 @@ import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { PrefValue } from "@gnash/prefs";
+import CONTROLS from "../../../data/controls.json" with { type: "json" };
+import * as live from "./live.ts";
 import { loadDefaults } from "./omni.ts";
 import { discoverProfiles, isRunning, type Profile } from "./profiles.ts";
 import { apply, ConflictError, preview, readLayers, validateChanges, ValidationError } from "./store.ts";
@@ -62,6 +64,13 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+function validateNames(input: unknown): string[] {
+  if (!Array.isArray(input) || input.length > 5000 || !input.every((n) => typeof n === "string" && n.length <= 512)) {
+    throw new ValidationError("names must be a list of pref names");
+  }
+  return input as string[];
+}
+
 type Row = { name: string; def?: PrefValue; prefs?: PrefValue; user?: PrefValue };
 
 export function createApp(opts: AppOptions): Server {
@@ -73,8 +82,16 @@ export function createApp(opts: AppOptions): Server {
     return p;
   }
 
+  function liveSession(required: boolean): live.LiveSession | null {
+    const s = live.current;
+    if (s?.isClosed) live.setCurrent(null);
+    if (required && (!s || s.isClosed)) throw new HttpError(409, "Live mode is off");
+    return s && !s.isClosed ? s : null;
+  }
+
   async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
-    const m = /^\/api\/profiles\/([0-9a-f]{12})(?:\/(preview|apply))?$/.exec(url.pathname);
+    const m = /^\/api\/profiles\/([0-9a-f]{12})(?:\/(preview|apply|live))?$/.exec(url.pathname);
+    const liveCmd = /^\/api\/live\/(read|set|revert|keep|stop)$/.exec(url.pathname)?.[1];
     if (req.method === "GET" && url.pathname === "/") {
       const nonce = randomBytes(16).toString("base64");
       const html = (await readFile(INDEX_HTML, "utf8")).replaceAll("<script>", `<script nonce="${nonce}">`);
@@ -88,6 +105,40 @@ export function createApp(opts: AppOptions): Server {
       res.end(html);
     } else if (req.method === "GET" && url.pathname === "/api/ping") {
       send(res, 200, { ok: true });
+    } else if (req.method === "GET" && url.pathname === "/api/controls") {
+      send(res, 200, CONTROLS);
+    } else if (req.method === "GET" && url.pathname === "/api/live") {
+      const s = liveSession(false);
+      send(res, 200, s ? { active: true, profileId: s.profileId, touched: [...s.originals.keys()] } : { active: false });
+    } else if (req.method === "POST" && m?.[2] === "live") {
+      await readJson(req);
+      const p = await findProfile(m[1]!);
+      const s = liveSession(false);
+      if (s?.profileId !== p.id) {
+        await live.stopCurrent();
+        if (await isRunning(p).catch(() => false)) {
+          throw new HttpError(409, "Firefox is already running with this profile. Quit it, then Go live.");
+        }
+        live.setCurrent(await live.launchLive(p));
+      }
+      send(res, 200, { active: true, profileId: p.id });
+    } else if (req.method === "POST" && liveCmd) {
+      const body = await readJson(req);
+      if (liveCmd === "stop") {
+        await live.stopCurrent();
+        return send(res, 200, { active: false });
+      }
+      const s = liveSession(true)!;
+      if (liveCmd === "set") {
+        const [c] = validateChanges([{ name: body.name, value: body.value }]);
+        await s.set(c!.name, c!.value);
+        send(res, 200, { ok: true });
+      } else {
+        const names = body.names === undefined && liveCmd === "revert" ? undefined : validateNames(body.names);
+        if (liveCmd === "read") send(res, 200, await s.read(names!));
+        else if (liveCmd === "keep") (s.keep(names!), send(res, 200, { ok: true }));
+        else (await s.revert(names), send(res, 200, { ok: true }));
+      }
     } else if (req.method === "GET" && url.pathname === "/api/profiles") {
       const list = await getProfiles();
       send(
@@ -160,6 +211,11 @@ export function createApp(opts: AppOptions): Server {
       if (e instanceof HttpError) send(res, e.status, { error: e.message });
       else if (e instanceof ConflictError) send(res, 409, { error: e.message });
       else if (e instanceof ValidationError) send(res, 400, { error: e.message });
+      else if (e instanceof live.LiveError) send(res, 502, { error: e.message });
+      else if (e instanceof live.LiveClosedError) {
+        live.setCurrent(null);
+        send(res, 410, { error: "Firefox was closed, so live mode ended." });
+      }
       else {
         console.error(e);
         send(res, 500, { error: "internal error" });

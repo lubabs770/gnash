@@ -18,7 +18,24 @@ npm start
 Your browser opens on a one-time link. Pick a profile, filter, edit, review the
 diff, apply.
 
-## What it does (v0.1)
+## What it does
+
+**Customize**: sliders, toggles and choosers for about 30 curated prefs (density,
+interface scale, vertical tabs, fonts, colors, scrolling, tab behavior, sponsored
+stuff), next to a simulated Firefox window that updates as you drag. Curated controls
+live in [`data/controls.json`](data/controls.json).
+
+**Live**: flip the Live switch and gnash starts Firefox on the profile with
+remote control on (Marionette), then applies each change in real Firefox as you
+make it. Save keeps changes in `user.js`; anything unsaved is undone when you turn
+Live off or quit gnash. Firefox must not already be running on that profile, and it
+shows a robot icon and striped address bar until you restart it normally. While Live
+is on, other programs on your computer could also control that Firefox.
+
+**All prefs**: the full three-way table, with toggles for booleans and typed editors
+for everything else.
+
+Under the hood:
 
 - Finds profiles from `profiles.ini` / `installs.ini` and lets you pick one.
   Profile locations live in [`data/paths.json`](data/paths.json).
@@ -41,12 +58,13 @@ The server writes into your browser profile, so it trusts nothing:
 - Writes need a matching `Origin` and a JSON body; no CORS headers.
 - The UI never sees file paths, only profile IDs the server issued.
 - Strict Content-Security-Policy; file contents are rendered as text, never HTML.
-- Shuts down after 10 minutes with no open tab.
+- Shuts down after 10 minutes with no open tab, undoing unsaved live changes.
+- Live mode is off until you turn it on, and talks to Firefox only over loopback.
 
 ## Limits
 
 - Removing a pref from `user.js` doesn't reset it in `prefs.js`; Firefox keeps
-  the last value. A cleaner for that is planned for v0.2.
+  the last value. A cleaner for that is planned.
 - Prefs compiled into Firefox (`StaticPrefList.yaml`) show "no default" until the
   description bundle arrives in v0.3.
 - Tested on macOS. Linux and Windows paths are in place but unverified.
@@ -64,8 +82,8 @@ writes), `apps/web` (one HTML file, no framework), `data/` (profile paths).
 
 ## Roadmap
 
-- **v0.2**: Windows, Linux, Flatpak, Snap and forks verified; single executables
-  from CI; cleaner and backup restore in the UI.
+- **Next**: Windows, Linux, Flatpak, Snap and forks verified; single executables
+  from CI; cleaner and backup restore in the UI; more curated controls.
 - **v0.3**: pref descriptions and categories, built in CI from mozilla-central
   and other sources; flag prefs that no longer exist.
 

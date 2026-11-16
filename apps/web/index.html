@@ -7,130 +7,278 @@
 <link rel="icon" href="data:,">
 <style>
   :root {
-    --bg: #fbfbfa; --panel: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --line: #e3e3e0;
-    --accent: #c2410c; --accent-fg: #fff; --hover: #f3f3f1;
+    --bg: #f6f5f2; --panel: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --line: #e3e2de; --soft: #efeeea;
+    --accent: #c2410c; --accent-fg: #fff; --hover: #f1f0ec;
     --user: #1d4ed8; --user-bg: #eff4ff; --pend: #a16207; --pend-bg: #fdf6e3;
     --warn-bg: #fff7ed; --warn-line: #fdba74; --add: #e7f6ec; --add-fg: #166534; --del: #fdecec; --del-fg: #991b1b;
+    --live: #059669; --live-bg: #e6f7f0;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #161617; --panel: #1e1e20; --fg: #ececee; --muted: #9a9aa1; --line: #313134;
+      --bg: #141415; --panel: #1d1d1f; --fg: #ececee; --muted: #9a9aa1; --line: #313134; --soft: #252527;
       --accent: #fb923c; --accent-fg: #1a1a1a; --hover: #262629;
       --user: #93b4ff; --user-bg: #1c2540; --pend: #facc15; --pend-bg: #33290d;
       --warn-bg: #2b1d10; --warn-line: #9a4d12; --add: #12301d; --add-fg: #86efac; --del: #3a1616; --del-fg: #fca5a5;
+      --live: #34d399; --live-bg: #0f2a20;
       color-scheme: dark;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  code, .mono, td, input, select, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
+  .mono, td, pre, .readout { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
   button, input, select { font: inherit; color: inherit; }
-  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+  [hidden] { display: none !important; }
+
+  /* header */
+  header { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; }
   h1 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
-  h1 span { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 6px; }
+  .tabs { display: inline-flex; gap: 2px; background: var(--soft); padding: 3px; border-radius: 8px; }
+  .tabs button { border: 0; background: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; color: var(--muted); font-weight: 500; }
+  .tabs button[aria-selected=true] { background: var(--panel); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
   .grow { flex: 1; }
-  select, input[type=search], input[type=text] { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  select, input[type=search], input[type=text], input[type=number] { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-width: 0; }
   button { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
   button:hover { background: var(--hover); }
+  button:disabled { opacity: .5; cursor: default; }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
-  button.link { border: 0; background: none; padding: 2px 4px; color: var(--muted); font: 13px system-ui, -apple-system, "Segoe UI", sans-serif; }
-  button.link:hover { color: var(--fg); background: none; text-decoration: underline; }
-  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  main { padding: 12px 16px 96px; }
+  button.link { border: 0; background: none; padding: 2px 4px; color: var(--muted); font-size: 13px; }
+  button.link:hover { color: var(--fg); text-decoration: underline; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .livebox { display: inline-flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; border: 1px solid var(--line); border-radius: 999px; }
+  .livebox.on { border-color: var(--live); background: var(--live-bg); }
+  .livebox .lbl { font-size: 13px; font-weight: 600; }
+  .livebox.on .lbl { color: var(--live); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); opacity: .5; }
+  .livebox.on .dot { background: var(--live); opacity: 1; box-shadow: 0 0 0 0 var(--live); animation: pulse 1.6s infinite; }
+  .livebox.busy .dot { background: var(--pend); opacity: 1; animation: pulse .8s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent); } 100% { box-shadow: 0 0 0 6px transparent; } }
+
+  /* switch */
+  .switch { position: relative; width: 38px; height: 22px; border-radius: 999px; border: 0; padding: 0; background: var(--line); flex: none; transition: background .15s; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .3); transition: transform .15s; }
+  .switch[aria-checked=true] { background: var(--accent); }
+  .switch[aria-checked=true]::after { transform: translateX(16px); }
+  .switch:hover { filter: brightness(.97); background: var(--line); }
+  .switch[aria-checked=true]:hover { background: var(--accent); }
+  .switch.sm { width: 32px; height: 18px; }
+  .switch.sm::after { width: 12px; height: 12px; }
+  .switch.sm[aria-checked=true]::after { transform: translateX(14px); }
+
+  main { padding: 14px 16px 96px; }
   .notice { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; }
-  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
-  .toolbar input[type=search] { flex: 1 1 260px; min-width: 0; }
-  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; flex-wrap: wrap; }
-  .seg button { border: 0; border-radius: 0; border-right: 1px solid var(--line); }
+
+  /* customize */
+  .studio { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(380px, 1.15fr); gap: 16px; align-items: start; }
+  .groups { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .group { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  .group h2 { margin: 0; font-size: 13px; font-weight: 650; padding: 10px 14px; border-bottom: 1px solid var(--line); letter-spacing: .01em; }
+  .ctl { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); align-items: center; }
+  .ctl:last-child { border-bottom: 0; }
+  .ctl .meta { min-width: 0; }
+  .ctl .name { font-weight: 550; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ctl .help { color: var(--muted); font-size: 12.5px; }
+  .ctl .pref { color: var(--muted); font: 11px ui-monospace, Menlo, monospace; opacity: .8; overflow-wrap: anywhere; }
+  .ctl .widget { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .ctl .widget.inline { grid-column: 2; grid-row: 1 / span 2; }
+  .ctl.changed { box-shadow: inset 3px 0 0 var(--pend); }
+  .ctl.saved { box-shadow: inset 3px 0 0 var(--user); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; flex-wrap: wrap; }
+  .seg button { border: 0; border-radius: 0; border-right: 1px solid var(--line); padding: 5px 11px; font-size: 13px; }
   .seg button:last-child { border-right: 0; }
-  .seg button[aria-pressed=true] { background: var(--fg); color: var(--bg); }
+  .seg button[aria-checked=true], .seg button[aria-pressed=true] { background: var(--fg); color: var(--bg); }
+  input[type=range] { flex: 1; min-width: 140px; accent-color: var(--accent); }
+  input[type=color] { width: 40px; height: 28px; padding: 0 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+  .readout { min-width: 6ch; text-align: right; color: var(--fg); }
+  .badge { display: inline-block; font: 600 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+  .badge.warn { border-color: var(--warn-line); color: var(--pend); }
+  .badge.live { border-color: var(--live); color: var(--live); }
+
+  /* preview */
+  .stage { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 8px; }
+  .stage-head { display: flex; align-items: baseline; gap: 8px; color: var(--muted); font-size: 12.5px; }
+  .stage-head strong { color: var(--fg); font-size: 13px; }
+  .frame { border-radius: 12px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 10px 30px -12px rgb(0 0 0 / .25); background: #f9f9fb; height: min(620px, calc(100vh - 140px)); display: flex; flex-direction: column; }
+  .mock { --d: 4px; --tabmin: 76px; display: flex; flex-direction: column; height: 100%; color: #15141a; font: 12px system-ui, -apple-system, sans-serif; }
+  .mock.dark-ui { color: #fbfbfe; }
+  .mchrome { background: #f0f0f4; border-bottom: 1px solid #d7d7db; flex: none; }
+  .mock.dark-ui .mchrome { background: #1c1b22; border-color: #3a3944; }
+  .mtabs { display: flex; align-items: flex-end; gap: 2px; padding: calc(var(--d) + 2px) 8px 0 70px; position: relative; overflow: hidden; }
+  .mtabs::before { content: ""; position: absolute; left: 12px; top: 50%; width: 40px; height: 10px; transform: translateY(-30%);
+    background: radial-gradient(circle at 5px 5px, #ff5f57 4.5px, transparent 5px), radial-gradient(circle at 20px 5px, #febc2e 4.5px, transparent 5px), radial-gradient(circle at 35px 5px, #28c840 4.5px, transparent 5px); }
+  .mtab { flex: 1 1 0; min-width: var(--tabmin); max-width: 220px; display: flex; align-items: center; gap: 6px; padding: calc(var(--d) + 3px) 8px; border-radius: 6px 6px 0 0; white-space: nowrap; overflow: hidden; color: inherit; opacity: .75; }
+  .mtab.sel { background: #fff; opacity: 1; box-shadow: 0 0 4px rgb(0 0 0 / .12); }
+  .mock.dark-ui .mtab.sel { background: #42414d; }
+  .mtab .fav { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+  .mtab span { overflow: hidden; text-overflow: ellipsis; }
+  .mtab.enter { animation: tabin .35s ease-out; }
+  @keyframes tabin { from { max-width: 0; min-width: 0; opacity: 0; } }
+  .mplus { border: 0; background: none; padding: 2px 8px calc(var(--d) + 3px); font-size: 15px; line-height: 1; color: inherit; opacity: .7; }
+  .mtoolbar { display: flex; align-items: center; gap: 6px; padding: var(--d) 8px; background: #f9f9fb; }
+  .mock.dark-ui .mtoolbar { background: #2b2a33; }
+  .mbtn { width: calc(18px + var(--d) * 2); height: calc(18px + var(--d) * 2); border-radius: 5px; display: grid; place-items: center; opacity: .7; font-size: 13px; }
+  .murl { flex: 1; background: #f0f0f4; border-radius: 6px; padding: calc(var(--d) + 1px) 10px; display: flex; gap: 4px; min-width: 0; white-space: nowrap; overflow: hidden; }
+  .mock.dark-ui .murl { background: #1c1b22; }
+  .murl .scheme { opacity: .55; }
+  .mbookmarks { display: flex; gap: 12px; padding: calc(var(--d) - 1px) 12px calc(var(--d) + 1px); background: #f9f9fb; font-size: 11.5px; opacity: .9; border-top: 1px solid #ececf0; }
+  .mock.dark-ui .mbookmarks { background: #2b2a33; border-color: #3a3944; }
+  .mbookmarks i { font-style: normal; display: inline-flex; gap: 4px; align-items: center; }
+  .mbookmarks i::before { content: ""; width: 9px; height: 9px; border-radius: 2px; background: currentColor; opacity: .35; }
+  .mbody { flex: 1; display: flex; min-height: 0; }
+  .mside { width: 150px; flex: none; background: #f0f0f4; border-right: 1px solid #d7d7db; padding: 8px 6px; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+  .mock.dark-ui .mside { background: #1c1b22; border-color: #3a3944; }
+  .mside .mtab { flex: none; min-width: 0; max-width: none; border-radius: 6px; padding: calc(var(--d) + 2px) 8px; }
+  .mpage { flex: 1; overflow-y: auto; overscroll-behavior: contain; min-width: 0; }
+  .mpage .site { --site-bg: #fffdf8; --site-fg: #2a2723; --site-accent: #b45309; background: var(--site-bg); color: var(--site-fg); min-height: 100%; padding: 22px 28px 40px;
+    font-family: var(--deffont); font-size: var(--fsize); line-height: 1.55; }
+  .mpage .site.dark { --site-bg: #1b1a1e; --site-fg: #e7e3dc; --site-accent: #f59e0b; }
+  .mpage .site.override { --site-bg: var(--ovbg); --site-fg: var(--ovfg); --site-accent: var(--ovfg); }
+  .mpage .site nav { font: 600 max(var(--fmin), 11px)/1.2 var(--sitefont); letter-spacing: .08em; text-transform: uppercase; color: var(--site-accent); margin-bottom: 14px; }
+  .mpage .site h1 { font: 700 calc(var(--fsize) * 1.75)/1.15 var(--sitefont); margin: 0 0 6px; letter-spacing: -.01em; }
+  .mpage .site .by { font-size: max(var(--fmin), calc(var(--fsize) * .8)); opacity: .7; margin: 0 0 14px; font-family: var(--sitefont); }
+  .mpage .site p { margin: 0 0 12px; }
+  .mpage .site a { color: var(--link); text-decoration: var(--linkdeco); }
+  .mpage .site code { font-family: ui-monospace, Menlo, monospace; font-size: var(--fmono); background: color-mix(in srgb, var(--site-fg) 8%, transparent); padding: 1px 4px; border-radius: 3px; }
+  .mpage .site pre { font-family: ui-monospace, Menlo, monospace; font-size: var(--fmono); background: color-mix(in srgb, var(--site-fg) 7%, transparent); padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 0 0 12px; }
+  .mpage .site small { display: block; font-size: max(var(--fmin), 9px); opacity: .75; margin-top: 18px; }
+  .stage-foot { display: flex; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+
+  /* table */
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .toolbar input[type=search] { flex: 1 1 260px; }
   .count { color: var(--muted); font-size: 12.5px; }
   .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
   table { border-collapse: collapse; width: 100%; }
   th { text-align: left; font: 600 12px system-ui, sans-serif; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; max-width: 32ch; }
+  td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; overflow-wrap: anywhere; max-width: 32ch; }
   tr:last-child td { border-bottom: 0; }
   td.name { max-width: 46ch; }
+  td .badge { margin-left: 6px; }
   td.actions { white-space: nowrap; text-align: right; max-width: none; }
   .none { color: var(--muted); opacity: .6; }
   .user { color: var(--user); background: var(--user-bg); border-radius: 4px; padding: 0 4px; }
   .pending { color: var(--pend); background: var(--pend-bg); border-radius: 4px; padding: 0 4px; }
   .removed { text-decoration: line-through; }
-  .badge { display: inline-block; font: 600 10.5px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .03em; padding: 1px 5px; border-radius: 4px; margin-left: 6px; border: 1px solid var(--line); color: var(--muted); vertical-align: 1px; }
-  .badge.warn { border-color: var(--warn-line); color: var(--pend); }
+  .cellctl { display: inline-flex; align-items: center; gap: 8px; }
   .editor { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .editor input[type=text] { min-width: 12ch; flex: 1; }
+  .editor input[type=text], .editor input[type=number] { min-width: 10ch; flex: 1; }
   .err { color: var(--del-fg); font-size: 12px; width: 100%; }
-  .bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 10px; align-items: center; padding: 12px 16px; background: var(--panel); border-top: 1px solid var(--line); }
-  .bar[hidden] { display: none; }
-  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--fg); padding: 0; width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 64px); }
+  .empty { padding: 40px 16px; text-align: center; color: var(--muted); }
+
+  /* bottom bar, dialogs, toast */
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 16px; background: var(--panel); border-top: 1px solid var(--line); z-index: 6; }
+  dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--fg); padding: 0; width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 64px); }
+  dialog.narrow { width: min(520px, calc(100vw - 32px)); }
   dialog::backdrop { background: rgb(0 0 0 / .35); }
   .dlg { display: flex; flex-direction: column; max-height: calc(100vh - 64px); }
   .dlg h2 { margin: 0; font-size: 15px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
   .dlg .body { padding: 12px 16px; overflow: auto; }
   .dlg .foot { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--line); }
   .dlg p { margin: 0 0 10px; color: var(--muted); }
+  .dlg ul { margin: 0 0 10px; padding-left: 18px; color: var(--muted); }
   pre.diff { margin: 0; border: 1px solid var(--line); border-radius: 6px; overflow: auto; }
   pre.diff span { display: block; padding: 0 8px; white-space: pre; }
   pre.diff .a { background: var(--add); color: var(--add-fg); }
   pre.diff .d { background: var(--del); color: var(--del-fg); }
   pre.diff .h { color: var(--muted); }
   .form { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; }
-  .toast { position: fixed; right: 16px; bottom: 76px; background: var(--fg); color: var(--bg); padding: 10px 14px; border-radius: 8px; max-width: calc(100vw - 32px); }
-  .empty { padding: 40px 16px; text-align: center; color: var(--muted); }
-  @media (max-width: 640px) { td.def, th.def { display: none; } }
+  .toast { position: fixed; right: 16px; bottom: 76px; background: var(--fg); color: var(--bg); padding: 10px 14px; border-radius: 8px; max-width: calc(100vw - 32px); z-index: 7; }
+
+  @media (max-width: 900px) {
+    .studio { grid-template-columns: 1fr; }
+    .stage { position: static; order: -1; }
+    .frame { height: 420px; }
+  }
+  @media (max-width: 640px) { td.def, th.def { display: none; } .ctl .widget.inline { grid-column: 1 / -1; grid-row: auto; } }
 </style>
 </head>
 <body>
 <header>
-  <h1>gnash<span>Firefox prefs</span></h1>
+  <h1>gnash</h1>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-customize" aria-selected="true" aria-controls="view-customize">Customize</button>
+    <button role="tab" id="tab-all" aria-selected="false" aria-controls="view-all">All prefs</button>
+  </div>
   <div class="grow"></div>
-  <label class="count" for="profile">Profile</label>
-  <select id="profile"></select>
+  <select id="profile" aria-label="Profile"></select>
+  <div class="livebox" id="livebox" title="Apply changes to a real Firefox as you make them">
+    <span class="dot"></span><span class="lbl" id="liveLabel">Live</span>
+    <button class="switch sm" role="switch" aria-checked="false" id="liveSwitch" aria-label="Live in Firefox"></button>
+  </div>
 </header>
+
 <main>
   <div id="notices"></div>
-  <div class="toolbar">
-    <input id="q" type="search" placeholder="Filter by pref name or value" aria-label="Filter prefs">
-    <div class="seg" role="group" aria-label="Show">
-      <button data-f="changed" aria-pressed="true" title="Set in prefs.js or user.js">Changed</button>
-      <button data-f="userjs" aria-pressed="false">In user.js</button>
-      <button data-f="conflict" aria-pressed="false" title="user.js and prefs.js disagree">Differs</button>
-      <button data-f="nodefault" aria-pressed="false" title="Not in this install's default files">No default</button>
-      <button data-f="all" aria-pressed="false">All</button>
+
+  <section id="view-customize" role="tabpanel" aria-labelledby="tab-customize">
+    <div class="studio">
+      <div class="groups" id="groups"></div>
+      <div class="stage">
+        <div class="stage-head"><strong>Preview</strong><span id="stageNote">Simulated. Drag a slider and watch it change.</span></div>
+        <div class="frame"><div class="mock" id="mock"></div></div>
+        <div class="stage-foot" id="stageFoot"></div>
+      </div>
     </div>
-    <button id="add">Add pref</button>
-    <span class="count" id="count"></span>
-  </div>
-  <div class="tablewrap">
-    <table>
-      <thead><tr><th>Pref</th><th class="def">Default</th><th>prefs.js</th><th>user.js</th><th></th></tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
-  </div>
-  <div id="empty" class="empty" hidden></div>
+  </section>
+
+  <section id="view-all" role="tabpanel" aria-labelledby="tab-all" hidden>
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="Filter by pref name or value" aria-label="Filter prefs">
+      <div class="seg" role="group" aria-label="Show">
+        <button data-f="changed" aria-pressed="true" title="Set in prefs.js or user.js">Changed</button>
+        <button data-f="userjs" aria-pressed="false">In user.js</button>
+        <button data-f="conflict" aria-pressed="false" title="user.js and prefs.js disagree">Differs</button>
+        <button data-f="nodefault" aria-pressed="false" title="Not in this install's default files">No default</button>
+        <button data-f="all" aria-pressed="false">All</button>
+      </div>
+      <button id="add">Add pref</button>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Pref</th><th class="def">Default</th><th>prefs.js</th><th>user.js</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div id="empty" class="empty" hidden></div>
+  </section>
 </main>
 
 <div class="bar" id="bar" hidden>
   <span id="pendingText"></span>
   <div class="grow"></div>
   <button id="discard">Discard</button>
-  <button id="review" class="primary">Review changes</button>
+  <button id="review" class="primary">Review &amp; save</button>
 </div>
 
 <dialog id="reviewDlg">
   <div class="dlg">
-    <h2>Review changes to user.js</h2>
+    <h2>Save to user.js</h2>
     <div class="body">
-      <p>Nothing is written until you apply. user.js and prefs.js are backed up first. Changes take effect the next time Firefox starts.</p>
+      <p id="reviewNote">Nothing is written until you save. user.js and prefs.js are backed up first.</p>
       <pre class="diff" id="diff"></pre>
     </div>
-    <div class="foot"><button id="cancelReview">Back</button><button id="apply" class="primary">Apply</button></div>
+    <div class="foot"><button id="cancelReview">Back</button><button id="apply" class="primary">Save</button></div>
   </div>
 </dialog>
 
-<dialog id="addDlg">
+<dialog id="liveDlg" class="narrow">
+  <div class="dlg">
+    <h2>Go live in Firefox?</h2>
+    <div class="body">
+      <p>gnash will start Firefox on this profile with remote control turned on, and change prefs in it as you move the controls.</p>
+      <ul>
+        <li>Quit Firefox first if it's using this profile.</li>
+        <li>Firefox shows a robot icon and a striped address bar until you restart it normally.</li>
+        <li>While live, other programs on this computer could also control that Firefox.</li>
+        <li>Changes you don't save are undone when you turn live off or close gnash.</li>
+      </ul>
+    </div>
+    <div class="foot"><button id="cancelLive">Cancel</button><button id="confirmLive" class="primary">Start Firefox</button></div>
+  </div>
+</dialog>
+
+<dialog id="addDlg" class="narrow">
   <form class="dlg" id="addForm" method="dialog">
     <h2>Add a pref to user.js</h2>
     <div class="body form">
@@ -147,7 +295,11 @@
 "use strict";
 const $ = (s) => document.querySelector(s);
 const LIMIT = 400;
-const state = { profiles: [], id: null, data: null, pending: new Map(), filter: "changed", q: "", editing: null, hash: null };
+const state = {
+  profiles: [], id: null, data: null, byName: new Map(), controls: [],
+  pending: new Map(), filter: "changed", q: "", editing: null, hash: null, view: "customize",
+  live: false, liveDefaults: new Map(), liveTimers: new Map(), liveConfirmed: false,
+};
 
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -166,17 +318,19 @@ async function api(path, body) {
 function el(tag, attrs = {}, ...kids) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
+    if (v === undefined || v === false) continue;
     if (k === "class") n.className = v;
     else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
-    else n.setAttribute(k, v);
+    else n.setAttribute(k, v === true ? "" : v);
   }
-  for (const k of kids) if (k != null) n.append(k);
+  for (const k of kids) if (k != null && k !== false) n.append(k);
   return n;
 }
 
-const fmt = (v) => (typeof v === "string" ? JSON.stringify(v) : String(v));
+const fmt = (v) => (v === null ? "unset" : typeof v === "string" ? JSON.stringify(v) : String(v));
 const typeOf = (v) => (typeof v === "boolean" ? "boolean" : typeof v === "number" ? "integer" : "string");
 const valueCell = (v, cls = "") => (v === undefined ? el("span", { class: "none" }, "—") : el("span", { class: cls }, fmt(v)));
+const isHex = (v) => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
 
 function parseValue(type, raw) {
   if (type === "boolean") {
@@ -184,7 +338,7 @@ function parseValue(type, raw) {
     throw new Error("Enter true or false");
   }
   if (type === "integer") {
-    if (!/^[+-]?\d+$/.test(raw.trim())) throw new Error("Enter a whole number");
+    if (!/^[+-]?\d+$/.test(String(raw).trim())) throw new Error("Enter a whole number");
     const n = Number(raw);
     if (n < -(2 ** 31) || n >= 2 ** 31) throw new Error("Out of range for a Firefox integer");
     return n;
@@ -198,7 +352,42 @@ function toast(msg) {
   setTimeout(() => t.remove(), 5000);
 }
 
+function switchEl(checked, onToggle, label, sm) {
+  return el("button", { class: `switch${sm ? " sm" : ""}`, role: "switch", "aria-checked": String(!!checked), "aria-label": label,
+    onclick: () => onToggle(!checked) });
+}
+
+// --- values ----------------------------------------------------------------
+
+/** Default as Firefox sees it: live read beats omni.ja beats the catalog's fallback. */
+function defaultOf(name, fallback) {
+  if (state.liveDefaults.has(name) && state.liveDefaults.get(name) !== null) return state.liveDefaults.get(name);
+  const r = state.byName.get(name);
+  if (r && r.def !== undefined) return r.def;
+  return fallback;
+}
+/** What the pref will be after the next start, including staged changes. */
+function effective(name, fallback) {
+  if (state.pending.has(name)) {
+    const v = state.pending.get(name);
+    if (v !== null) return v;
+    const r = state.byName.get(name);
+    return r && r.prefs !== undefined ? r.prefs : defaultOf(name, fallback);
+  }
+  const r = state.byName.get(name);
+  if (r && r.user !== undefined) return r.user;
+  if (r && r.prefs !== undefined) return r.prefs;
+  return defaultOf(name, fallback);
+}
+
 // --- loading ---------------------------------------------------------------
+
+async function init() {
+  const [controls, live] = await Promise.all([api("/api/controls"), api("/api/live")]);
+  state.controls = controls;
+  await loadProfiles();
+  if (live.active && live.profileId === state.id) await enterLive(true);
+}
 
 async function loadProfiles() {
   state.profiles = await api("/api/profiles");
@@ -207,56 +396,300 @@ async function loadProfiles() {
   if (!state.profiles.length) {
     sel.append(el("option", {}, "No Firefox profiles found"));
     sel.disabled = true;
-    showEmpty("No Firefox profiles were found on this computer.");
+    $("#notices").replaceChildren(el("div", { class: "notice" }, "No Firefox profiles were found on this computer."));
     return;
   }
   const saved = store.get("gnash.profile");
   const pick = state.profiles.find((p) => p.id === saved) || (state.profiles.length === 1 ? state.profiles[0] : null);
   if (!pick) sel.append(el("option", { value: "" }, "Choose a profile…"));
   for (const p of state.profiles) {
-    const label = `${p.browser}: ${p.name}${p.isDefault ? " (default)" : ""}${p.version ? ` · ${p.version}` : ""}`;
-    sel.append(el("option", { value: p.id }, label));
+    sel.append(el("option", { value: p.id }, `${p.browser}: ${p.name}${p.isDefault ? " (default)" : ""}${p.version ? ` · ${p.version}` : ""}`));
   }
   if (pick) { sel.value = pick.id; await selectProfile(pick.id); }
-  else showEmpty("Pick the profile you want to edit.");
+  else $("#notices").replaceChildren(el("div", { class: "notice" }, "Pick the profile you want to customize."));
 }
 
 async function selectProfile(id) {
-  if (state.pending.size && !confirmDiscard()) { $("#profile").value = state.id; return; }
-  state.id = id; state.pending.clear(); state.editing = null;
+  if (state.pending.size) { $("#profile").value = state.id; toast("Save or discard your changes first."); return; }
+  if (state.live) await leaveLive();
+  state.id = id; state.editing = null;
   store.set("gnash.profile", id);
   await reload();
-}
-
-function confirmDiscard() {
-  // Inline confirmation instead of window.confirm, which blocks the page.
-  toast("Apply or discard your pending changes first.");
-  return false;
 }
 
 async function reload() {
   if (!state.id) return;
   state.data = await api(`/api/profiles/${state.id}`);
+  state.byName = new Map(state.data.rows.map((r) => [r.name, r]));
   state.hash = state.data.userJsHash;
   renderNotices();
-  render();
+  renderAll();
 }
 
 function renderNotices() {
   const n = $("#notices");
   n.replaceChildren();
   const d = state.data;
-  if (d.running) n.append(el("div", { class: "notice" }, "Firefox is running. You can still edit user.js; changes apply the next time Firefox starts."));
+  if (d.running && !state.live) n.append(el("div", { class: "notice" }, "Firefox is running on this profile. Saved changes apply the next time it starts. To see them live, quit Firefox and turn on Live."));
   if (!d.defaultsFound) n.append(el("div", { class: "notice" }, "Couldn't read default values from this profile's Firefox install. Start Firefox once with this profile, then reload."));
 }
 
-function showEmpty(msg) {
-  $("#rows").replaceChildren();
-  $("#count").textContent = "";
-  const e = $("#empty"); e.hidden = false; e.textContent = msg;
+function renderAll() {
+  renderControls();
+  renderPreview();
+  if (state.view === "all") renderTable();
+  renderBar();
 }
 
-// --- table -----------------------------------------------------------------
+// --- staging & live --------------------------------------------------------
+
+/** Stage a change. value null = remove from user.js. */
+function stage(name, value, { render = true } = {}) {
+  const r = state.byName.get(name);
+  const onDisk = r ? r.user : undefined;
+  if ((value === null && onDisk === undefined) || (value !== null && value === onDisk)) state.pending.delete(name);
+  else state.pending.set(name, value);
+  state.editing = null;
+  pushLive(name, value === null ? null : value);
+  if (render) renderAll();
+}
+
+function unstage(name) {
+  state.pending.delete(name);
+  if (state.live) api("/api/live/revert", { names: [name] }).catch(liveFailed);
+  renderAll();
+}
+
+function pushLive(name, value) {
+  if (!state.live) return;
+  clearTimeout(state.liveTimers.get(name));
+  state.liveTimers.set(name, setTimeout(() => {
+    state.liveTimers.delete(name);
+    api("/api/live/set", { name, value }).then(() => flashLive(), liveFailed);
+  }, 90));
+}
+
+function flashLive() {
+  const b = $("#livebox");
+  b.classList.add("busy");
+  clearTimeout(flashLive.t);
+  flashLive.t = setTimeout(() => b.classList.remove("busy"), 250);
+}
+
+function liveFailed(e) {
+  if (e.status === 410 || e.status === 409) { setLiveUi(false); state.live = false; renderAll(); }
+  toast(e.message);
+}
+
+function setLiveUi(on, busyText) {
+  $("#livebox").classList.toggle("on", on);
+  $("#livebox").classList.toggle("busy", !!busyText);
+  $("#liveSwitch").setAttribute("aria-checked", String(on));
+  $("#liveLabel").textContent = busyText || (on ? "Live in Firefox" : "Live");
+  $("#stageNote").textContent = on ? "Live. Firefox updates as you change things; this preview follows along." : "Simulated. Drag a slider and watch it change.";
+}
+
+async function goLive() {
+  if (!state.id) return;
+  setLiveUi(false, "Starting Firefox…");
+  try {
+    await api(`/api/profiles/${state.id}/live`, {});
+    await enterLive(false);
+  } catch (e) {
+    setLiveUi(false);
+    toast(e.message);
+  }
+}
+
+async function enterLive(resumed) {
+  state.live = true;
+  setLiveUi(true);
+  const names = state.controls.map((c) => c.pref);
+  try {
+    const vals = await api("/api/live/read", { names });
+    state.liveDefaults = new Map(vals.map((v) => [v.name, v.def]));
+  } catch (e) { liveFailed(e); return; }
+  if (!resumed) for (const [n, v] of state.pending) await api("/api/live/set", { name: n, value: v }).catch(liveFailed);
+  renderNotices();
+  renderAll();
+  if (!resumed) toast("Live. Changes now show up in Firefox as you make them.");
+}
+
+async function leaveLive() {
+  setLiveUi(false, "Stopping…");
+  await api("/api/live/stop", {}).catch(() => {});
+  state.live = false;
+  setLiveUi(false);
+  renderNotices();
+  renderAll();
+}
+
+// --- customize view --------------------------------------------------------
+
+function renderControls() {
+  const box = $("#groups");
+  if (!state.data) { box.replaceChildren(); return; }
+  const groups = new Map();
+  for (const c of state.controls) (groups.get(c.group) ?? groups.set(c.group, []).get(c.group)).push(c);
+  box.replaceChildren(...[...groups].map(([g, cs]) => el("div", { class: "group" }, el("h2", {}, g), ...cs.map(renderControl))));
+}
+
+function renderControl(c) {
+  const def = defaultOf(c.pref, c.fallbackDefault);
+  const val = effective(c.pref, c.fallbackDefault);
+  const r = state.byName.get(c.pref);
+  const pend = state.pending.has(c.pref);
+  const notDefault = val !== def;
+  const set = (v) => stage(c.pref, v);
+  const reset = () => {
+    // Back to default: drop it from user.js, and pin the default if prefs.js still holds another value.
+    const stale = r && r.prefs !== undefined && r.prefs !== def;
+    stage(c.pref, stale && def !== null ? def : null);
+  };
+
+  let widget, inline = false;
+  if (c.control === "toggle") {
+    inline = true;
+    widget = switchEl(val, set, c.label);
+  } else if (c.control === "choice") {
+    widget = el("div", { class: "seg", role: "radiogroup", "aria-label": c.label },
+      ...c.options.map((o) => el("button", { role: "radio", "aria-checked": String(o.value === val || (o.value === null && val === undefined)),
+        onclick: () => set(o.value) }, o.label)));
+  } else if (c.control === "slider") {
+    const isAuto = c.auto !== undefined && (val === c.auto || Number(val) <= 0);
+    const num = isAuto ? 1 : Number(val);
+    const out = el("span", { class: "readout" }, isAuto ? "auto" : `${num}${c.unit === "%" ? "%" : c.unit === "×" ? "×" : ""}`);
+    const range = el("input", { type: "range", min: c.min, max: c.max, step: c.step, value: num, "aria-label": c.label });
+    const toValue = (n) => (c.type === "string" ? Number(n).toFixed(2) : Math.round(Number(n)));
+    range.addEventListener("input", () => {
+      const v = toValue(range.value);
+      out.textContent = `${Number(range.value)}${c.unit === "%" ? "%" : c.unit === "×" ? "×" : ""}`;
+      // Live-update preview and Firefox while dragging, without rebuilding the control under the cursor.
+      stage(c.pref, v, { render: false });
+      renderPreview();
+      renderBar();
+      row.classList.add("changed");
+    });
+    widget = el("div", { class: "widget-in", style: "display:flex;gap:10px;align-items:center;flex:1" },
+      range, out, c.auto !== undefined ? el("button", { class: "link", onclick: () => set(c.auto) }, "Auto") : null);
+  } else if (c.control === "color") {
+    inline = true;
+    const hex = isHex(val) ? val : c.fallbackDefault;
+    const pick = el("input", { type: "color", value: hex.toLowerCase(), "aria-label": c.label });
+    pick.addEventListener("input", () => { stage(c.pref, pick.value.toUpperCase(), { render: false }); renderPreview(); renderBar(); });
+    pick.addEventListener("change", () => renderAll());
+    widget = el("span", { class: "cellctl" }, el("span", { class: "readout" }, hex.toUpperCase()), pick);
+  }
+
+  const badges = [];
+  if (c.applies === "restart") badges.push(el("span", { class: "badge warn", title: "Takes effect after restarting Firefox" }, "restart"));
+  if (c.applies === "new-tabs") badges.push(el("span", { class: "badge", title: "Takes effect in new tabs" }, "new tabs"));
+  if (state.live && c.applies === "instant") badges.push(el("span", { class: "badge live" }, "live"));
+
+  const row = el("div", { class: `ctl${pend ? " changed" : r && r.user !== undefined ? " saved" : ""}` },
+    el("div", { class: "meta" },
+      el("div", { class: "name" }, c.label, ...badges,
+        notDefault ? el("button", { class: "link", onclick: reset, title: `Default: ${fmt(def)}` }, "reset") : null,
+        pend ? el("button", { class: "link", onclick: () => unstage(c.pref) }, "undo") : null),
+      c.help ? el("div", { class: "help" }, c.help) : null,
+      el("div", { class: "pref" }, c.pref)),
+    el("div", { class: `widget${inline ? " inline" : ""}` }, widget));
+  return row;
+}
+
+// --- simulated preview -----------------------------------------------------
+
+const TABS = [
+  ["#ff7139", "The quiet art of sourdough"],
+  ["#0060df", "Inbox (3)"],
+  ["#2ac3a2", "Weather: 14° and clear"],
+  ["#9059ff", "Release notes"],
+  ["#e22850", "Video: tiny houses"],
+];
+let extraTabs = 0;
+
+function renderPreview() {
+  const m = $("#mock");
+  if (!state.data) { m.replaceChildren(); return; }
+  const v = (p) => { const c = state.controls.find((x) => x.pref === p); return effective(p, c ? c.fallbackDefault : undefined); };
+  const sysDark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const sysReduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const density = { 1: "2px", 0: "4px", 2: "7px" }[v("browser.uidensity")] ?? "4px";
+  const scaleRaw = Number(v("layout.css.devPixelsPerPx"));
+  const scale = scaleRaw > 0 ? scaleRaw : 1;
+  const vertical = v("sidebar.verticalTabs") === true;
+  const bookmarks = v("browser.toolbars.bookmarks.visibility");
+  const appearance = v("layout.css.prefers-color-scheme.content-override");
+  const pageDark = appearance === 0 || (appearance === 2 && sysDark);
+  const colorUse = v("browser.display.document_color_use");
+  const siteFonts = v("browser.display.use_document_fonts") !== 0;
+  const defFont = v("font.default.x-western") === "sans-serif" ? "system-ui, -apple-system, Helvetica, sans-serif" : "Georgia, 'Times New Roman', serif";
+  const reduce = v("ui.prefersReducedMotion") === 1 || (v("ui.prefersReducedMotion") == null && sysReduce);
+
+  m.className = `mock${sysDark ? " dark-ui" : ""}`;
+  m.style.cssText = [
+    `--d:${density}`, `--tabmin:${v("browser.tabs.tabMinWidth")}px`, `zoom:${scale}`,
+    `--fsize:${v("font.size.variable.x-western")}px`, `--fmono:${Math.max(v("font.size.monospace.x-western"), v("font.minimum-size.x-western"))}px`,
+    `--fmin:${v("font.minimum-size.x-western")}px`, `--deffont:${defFont}`,
+    `--sitefont:${siteFonts ? "'Avenir Next', 'Futura', 'Trebuchet MS', sans-serif" : defFont}`,
+    `--ovbg:${v("browser.display.background_color")}`, `--ovfg:${v("browser.display.foreground_color")}`,
+    `--link:${pageDark && colorUse !== 2 ? effective("browser.anchor_color.dark", "#8C8CFF") : v("browser.anchor_color")}`,
+    `--linkdeco:${v("browser.underline_anchors") ? "underline" : "none"}`,
+  ].join(";");
+
+  const tabs = [...TABS, ...Array.from({ length: extraTabs }, (_, i) => ["#8f8f9d", `New Tab${i ? ` ${i + 1}` : ""}`])];
+  const tabEl = ([color, title], i, isNew) => el("div", { class: `mtab${i === 0 ? " sel" : ""}${isNew && !reduce ? " enter" : ""}` },
+    el("span", { class: "fav", style: `background:${color}` }), el("span", {}, title));
+  const plus = el("button", { class: "mplus", title: "Open a tab (shows reduce-motion)", "aria-label": "Add tab in preview",
+    onclick: () => { extraTabs = (extraTabs + 1) % 4; renderPreview(); } }, "+");
+
+  const trim = v("browser.urlbar.trimURLs");
+  const chrome = el("div", { class: "mchrome" },
+    vertical ? el("div", { class: "mtabs", style: "min-height:calc(var(--d) * 2 + 18px)" }) :
+      el("div", { class: "mtabs" }, ...tabs.map((t, i) => tabEl(t, i, i === tabs.length - 1 && extraTabs > 0)), plus),
+    el("div", { class: "mtoolbar" },
+      el("span", { class: "mbtn" }, "←"), el("span", { class: "mbtn" }, "→"), el("span", { class: "mbtn" }, "↻"),
+      el("div", { class: "murl" }, trim ? null : el("span", { class: "scheme" }, "https://"), el("span", {}, "bakery.example/journal/sourdough")),
+      el("span", { class: "mbtn" }, "☰")),
+    bookmarks === "always" ? el("div", { class: "mbookmarks" }, ...["Recipes", "Reading", "Work", "Maps", "News"].map((b) => el("i", {}, b))) : null);
+
+  const site = el("article", { class: `site${pageDark ? " dark" : ""}${colorUse === 2 ? " override" : ""}` },
+    el("nav", {}, "Hearth & Crumb"),
+    el("h1", {}, "The quiet art of sourdough"),
+    el("p", { class: "by" }, "By the bakery · 6 min read"),
+    el("p", {}, "A good loaf starts the night before. Feed your starter, cover it loosely, and let it rise until it's domed and full of bubbles. ",
+      el("a", { href: "#", onclick: (e) => e.preventDefault() }, "Here's how to tell it's ready"), "."),
+    el("p", {}, "Mix 500 g flour with 350 g water and rest it for an hour. That rest, the ", el("em", {}, "autolyse"),
+      ", does a surprising amount of the work for you."),
+    el("pre", {}, "hydration = water / flour\n         = 350 / 500 = 70%"),
+    el("p", {}, "Add 100 g of starter and 10 g of salt, then fold every half hour for two hours. Use ", el("code", {}, "wet hands"),
+      " so the dough doesn't stick."),
+    el("p", {}, "Shape it, put it in a floured basket, and leave it in the fridge overnight. Bake at 250 °C in a covered pot for 20 minutes, then uncovered until deep brown."),
+    el("p", {}, "Let it cool for an hour before cutting. Yes, really. The crumb is still setting."),
+    el("p", {}, "Scroll this page with your mouse wheel or trackpad: it uses your scroll speed and smoothness."),
+    el("small", {}, "This small print is 9px. Raise the minimum text size and it grows."));
+  const page = el("div", { class: "mpage" }, site);
+  page.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    page.scrollBy({ top: e.deltaY * (v("mousewheel.default.delta_multiplier_y") / 100), behavior: v("general.smoothScroll") ? "smooth" : "instant" });
+  }, { passive: false });
+
+  const body = el("div", { class: "mbody" },
+    vertical ? el("div", { class: "mside" }, ...tabs.map((t, i) => tabEl(t, i, i === tabs.length - 1 && extraTabs > 0)), plus) : null,
+    page);
+  const scrollTop = $("#mock .mpage")?.scrollTop ?? 0;
+  m.replaceChildren(chrome, body);
+  page.scrollTop = scrollTop;
+
+  const foot = [];
+  if (bookmarks === "newtab") foot.push("Bookmarks toolbar shows on new tab pages only.");
+  if (scale !== 1) foot.push(`Interface scale ${scale}×.`);
+  if (colorUse === 2) foot.push("Page colors overridden.");
+  $("#stageFoot").replaceChildren(...foot.map((t) => el("span", {}, t)));
+}
+
+// --- all prefs view --------------------------------------------------------
 
 function userValue(r) { return state.pending.has(r.name) ? state.pending.get(r.name) : r.user; }
 
@@ -276,41 +709,42 @@ function matches(r) {
 
 function allRows() {
   const rows = state.data.rows.slice();
-  const known = new Set(rows.map((r) => r.name));
-  for (const name of state.pending.keys()) if (!known.has(name)) rows.push({ name });
+  for (const name of state.pending.keys()) if (!state.byName.has(name)) rows.push({ name });
   return rows.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function render() {
+function renderTable() {
   if (!state.data) return;
   const list = allRows().filter(matches);
-  const body = $("#rows");
-  body.replaceChildren(...list.slice(0, LIMIT).map(renderRow));
+  $("#rows").replaceChildren(...list.slice(0, LIMIT).map(renderRow));
   $("#count").textContent = list.length > LIMIT ? `Showing ${LIMIT} of ${list.length}; filter to narrow` : `${list.length} prefs`;
   const e = $("#empty");
   e.hidden = list.length > 0;
   e.textContent = "No prefs match.";
-  renderBar();
 }
 
 function renderRow(r) {
   const pend = state.pending.has(r.name);
   const u = userValue(r);
+  const current = u ?? r.prefs ?? r.def;
   const badges = [];
   if (r.def === undefined) badges.push(el("span", { class: "badge", title: "Not in this install's default files. It may be built into Firefox, or no longer exist." }, "no default"));
   if (u != null && r.prefs !== undefined && u !== r.prefs) badges.push(el("span", { class: "badge warn", title: "user.js will replace the prefs.js value on next start" }, "differs"));
 
   let userCell;
-  if (state.editing === r.name) userCell = renderEditor(r);
-  else if (pend && u === null) userCell = el("span", { class: "pending removed" }, r.user === undefined ? "—" : fmt(r.user));
+  if (state.editing === r.name) userCell = renderEditor(r, current);
+  else if (typeof current === "boolean" && !(pend && u === null)) {
+    userCell = el("span", { class: "cellctl" }, switchEl(current, (nv) => stage(r.name, nv), `${r.name} in user.js`, true),
+      u === undefined ? el("span", { class: "none" }, "not in user.js") : el("span", { class: pend ? "pending" : "user" }, String(u)));
+  } else if (pend && u === null) userCell = el("span", { class: "pending removed" }, r.user === undefined ? "—" : fmt(r.user));
   else if (pend) userCell = valueCell(u, "pending");
   else userCell = valueCell(r.user, "user");
 
   const actions = [];
   if (state.editing !== r.name) {
-    actions.push(el("button", { class: "link", onclick: () => { state.editing = r.name; render(); } }, u == null ? "Set" : "Edit"));
-    if (u != null) actions.push(el("button", { class: "link", onclick: () => stage(r, null) }, "Remove"));
-    if (pend) actions.push(el("button", { class: "link", onclick: () => { state.pending.delete(r.name); render(); } }, "Undo"));
+    if (typeof current !== "boolean") actions.push(el("button", { class: "link", onclick: () => { state.editing = r.name; renderTable(); } }, u == null ? "Set" : "Edit"));
+    if (u != null) actions.push(el("button", { class: "link", onclick: () => stage(r.name, null) }, "Remove"));
+    if (pend) actions.push(el("button", { class: "link", onclick: () => unstage(r.name) }, "Undo"));
   }
   return el("tr", {},
     el("td", { class: "name" }, r.name, ...badges),
@@ -320,42 +754,35 @@ function renderRow(r) {
     el("td", { class: "actions" }, ...actions));
 }
 
-function renderEditor(r) {
-  const current = userValue(r) ?? r.prefs ?? r.def;
-  const type = el("select", { "aria-label": "Type" }, ...["string", "integer", "boolean"].map((t) => el("option", {}, t)));
-  type.value = current === undefined ? "string" : typeOf(current);
-  const input = el("input", { type: "text", "aria-label": `Value for ${r.name}` });
-  input.value = current === undefined || current === null ? "" : String(current);
+function renderEditor(r, current) {
+  const type = current === undefined ? "string" : typeOf(current);
   const err = el("span", { class: "err" });
-  const save = () => {
-    try { stage(r, parseValue(type.value, input.value)); }
-    catch (e) { err.textContent = e.message; }
-  };
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") save();
-    if (e.key === "Escape") { state.editing = null; render(); }
-  });
+  let input, read;
+  if (type === "integer") {
+    input = el("input", { type: "number", step: 1, "aria-label": `Value for ${r.name}` });
+    input.value = current ?? "";
+    read = () => parseValue("integer", input.value);
+  } else {
+    input = el("input", { type: "text", "aria-label": `Value for ${r.name}` });
+    input.value = current ?? "";
+    read = () => input.value;
+  }
+  const color = isHex(current) ? el("input", { type: "color", value: current.toLowerCase(), "aria-label": "Pick color" }) : null;
+  color?.addEventListener("input", () => (input.value = color.value.toUpperCase()));
+  const save = () => { try { stage(r.name, read()); } catch (e) { err.textContent = e.message; } };
+  const cancel = () => { state.editing = null; renderTable(); };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); if (e.key === "Escape") cancel(); });
   queueMicrotask(() => input.focus());
-  return el("div", { class: "editor" }, type, input,
-    el("button", { onclick: save }, "Save"),
-    el("button", { class: "link", onclick: () => { state.editing = null; render(); } }, "Cancel"), err);
+  return el("div", { class: "editor" }, color, input, el("button", { onclick: save }, "Save"), el("button", { class: "link", onclick: cancel }, "Cancel"), err);
 }
 
-function stage(r, value) {
-  state.editing = null;
-  if (value === null && r.user === undefined) state.pending.delete(r.name); // removing something only pending
-  else if (value !== null && value === r.user) state.pending.delete(r.name); // back to what's on disk
-  else state.pending.set(r.name, value);
-  render();
-}
+// --- bar, review, save -----------------------------------------------------
 
 function renderBar() {
   const n = state.pending.size;
   $("#bar").hidden = n === 0;
-  $("#pendingText").textContent = `${n} pending change${n === 1 ? "" : "s"} to user.js`;
+  $("#pendingText").textContent = `${n} unsaved change${n === 1 ? "" : "s"}${state.live ? " (already live in Firefox)" : ""}`;
 }
-
-// --- review & apply --------------------------------------------------------
 
 const changes = () => [...state.pending].map(([name, value]) => ({ name, value }));
 
@@ -367,37 +794,67 @@ async function review() {
       el("span", { class: l.startsWith("@@") ? "h" : l.startsWith("+") && !l.startsWith("+++") ? "a" : l.startsWith("-") && !l.startsWith("---") ? "d" : "" }, l || " ")));
     $("#apply").disabled = !diff;
     if (!diff) $("#diff").replaceChildren(el("span", {}, "These changes leave user.js exactly as it is."));
+    $("#reviewNote").textContent = state.live
+      ? "Saving keeps these in user.js, so they survive restarts. user.js and prefs.js are backed up first."
+      : "Nothing is written until you save. user.js and prefs.js are backed up first. Changes apply the next time Firefox starts.";
     $("#reviewDlg").showModal();
   } catch (e) { toast(e.message); }
 }
 
 async function applyChanges() {
   $("#apply").disabled = true;
+  const names = [...state.pending.keys()];
   try {
     const { backup } = await api(`/api/profiles/${state.id}/apply`, { changes: changes(), hash: state.hash });
     $("#reviewDlg").close();
+    if (state.live) await api("/api/live/keep", { names }).catch(liveFailed);
     state.pending.clear();
     await reload();
-    toast(`Saved user.js. Backup: .gnash-backups/${backup}`);
+    toast(`Saved to user.js. Backup: .gnash-backups/${backup}`);
   } catch (e) {
     if (e.status === 409) { toast("user.js changed on disk. Showing the updated diff."); await reload(); await review(); }
     else toast(e.message);
   } finally { $("#apply").disabled = false; }
 }
 
+async function discard() {
+  state.pending.clear();
+  state.editing = null;
+  if (state.live) await api("/api/live/revert", {}).catch(liveFailed);
+  renderAll();
+}
+
 // --- wiring ----------------------------------------------------------------
 
+function setView(v) {
+  state.view = v;
+  $("#tab-customize").setAttribute("aria-selected", String(v === "customize"));
+  $("#tab-all").setAttribute("aria-selected", String(v === "all"));
+  $("#view-customize").hidden = v !== "customize";
+  $("#view-all").hidden = v !== "all";
+  store.set("gnash.view", v);
+  renderAll();
+}
+$("#tab-customize").addEventListener("click", () => setView("customize"));
+$("#tab-all").addEventListener("click", () => setView("all"));
 $("#profile").addEventListener("change", (e) => e.target.value && selectProfile(e.target.value).catch((err) => toast(err.message)));
-$("#q").addEventListener("input", (e) => { state.q = e.target.value.trim(); render(); });
-document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+$("#q").addEventListener("input", (e) => { state.q = e.target.value.trim(); renderTable(); });
+document.querySelectorAll("[data-f]").forEach((b) => b.addEventListener("click", () => {
   state.filter = b.dataset.f;
-  document.querySelectorAll(".seg button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-  render();
+  document.querySelectorAll("[data-f]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  renderTable();
 }));
 $("#review").addEventListener("click", review);
-$("#discard").addEventListener("click", () => { state.pending.clear(); state.editing = null; render(); });
+$("#discard").addEventListener("click", discard);
 $("#cancelReview").addEventListener("click", () => $("#reviewDlg").close());
 $("#apply").addEventListener("click", applyChanges);
+$("#liveSwitch").addEventListener("click", () => {
+  if (state.live) return void leaveLive();
+  if (!state.id) return toast("Pick a profile first.");
+  $("#liveDlg").showModal();
+});
+$("#cancelLive").addEventListener("click", () => $("#liveDlg").close());
+$("#confirmLive").addEventListener("click", () => { $("#liveDlg").close(); goLive(); });
 $("#add").addEventListener("click", () => {
   if (!state.data) return;
   $("#addForm").reset(); $("#addErr").textContent = ""; $("#addDlg").showModal();
@@ -407,19 +864,19 @@ $("#addForm").addEventListener("submit", (e) => {
   const name = $("#addName").value.trim();
   try {
     if (!name || /[\0-\x1f\x7f]/.test(name)) throw new Error("Enter a pref name");
-    const value = parseValue($("#addType").value, $("#addValue").value);
-    const r = state.data.rows.find((x) => x.name === name) || { name };
-    stage(r, value);
+    stage(name, parseValue($("#addType").value, $("#addValue").value));
     state.q = name; $("#q").value = name;
     state.filter = "all";
-    document.querySelectorAll(".seg button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.f === "all")));
-    render();
+    document.querySelectorAll("[data-f]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.f === "all")));
+    renderTable();
   } catch (err) { e.preventDefault(); $("#addErr").textContent = err.message; }
 });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderPreview);
 window.addEventListener("beforeunload", (e) => { if (state.pending.size) e.preventDefault(); });
 setInterval(() => fetch("/api/ping").catch(() => {}), 30_000);
 
-loadProfiles().catch((e) => showEmpty(e.message));
+if (store.get("gnash.view") === "all") setView("all");
+init().catch((e) => toast(e.message));
 </script>
 </body>
 </html>

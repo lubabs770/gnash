@@ -90,15 +90,28 @@ export async function readProfilesIni(browser: string, root: string): Promise<Pr
 }
 
 export async function discoverProfiles(): Promise<Profile[]> {
-  const found = await Promise.all(profileRoots().map(({ browser, root }) => readProfilesIni(browser, root)));
+  const found = (await Promise.all(profileRoots().map(({ browser, root }) => readProfilesIni(browser, root)))).flat();
+  // Dev/testing only: a throwaway profile folder that is not in profiles.ini.
+  const extra = process.env.GNASH_EXTRA_PROFILE;
+  if (extra) {
+    const dir = resolve(extra);
+    const compat = parseIni((await readText(join(dir, "compatibility.ini"))) ?? "").Compatibility ?? {};
+    const installDirs = [compat.LastPlatformDir, compat.LastAppDir].filter((d): d is string => !!d);
+    found.push({
+      id: createHash("sha256").update(dir).digest("hex").slice(0, 12),
+      browser: "Firefox",
+      name: "dev: extra profile",
+      dir,
+      isDefault: false,
+      installDirs: installDirs.length ? installDirs : (found[0]?.installDirs ?? []),
+    });
+  }
   const seen = new Set<string>();
-  return found.flat().filter((p) => !seen.has(p.id) && !!seen.add(p.id));
+  return found.filter((p) => !seen.has(p.id) && !!seen.add(p.id));
 }
 
 /**
- * Best-effort "is Firefox using this profile right now". Only informs the UI:
- * gnash v0.1 writes user.js alone, which is safe while Firefox runs.
- * Returns null when it can't tell.
+ * Best-effort "is Firefox using this profile right now". Returns null when it can't tell.
  */
 export async function isRunning(p: Profile): Promise<boolean | null> {
   try {
@@ -114,11 +127,14 @@ export async function isRunning(p: Profile): Promise<boolean | null> {
     }
   } catch {}
   if (process.platform === "darwin" && p.installDirs[0]) {
-    // .parentlock persists on macOS, so look for this install's binary instead.
-    // ponytail: matches any profile of the same install; per-profile needs reading process args.
+    // .parentlock persists on macOS, so look at this install's running processes instead:
+    // one launched with this profile's folder, or one with no profile flag on the default profile.
     const bin = resolve(p.installDirs[0], "../MacOS/firefox");
-    const { stdout } = await promisify(execFile)("ps", ["-axo", "comm="]);
-    return stdout.split("\n").some((l) => l.trim() === bin);
+    const { stdout } = await promisify(execFile)("ps", ["-axww", "-o", "args="]);
+    return stdout
+      .split("\n")
+      .filter((l) => l.startsWith(bin + " ") || l === bin)
+      .some((l) => l.includes(p.dir) || (p.isDefault && !/\s-(-?profile|P)\b/.test(l)));
   }
   return null;
 }
