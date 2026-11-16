@@ -7,7 +7,8 @@ Status: early. Only `packages/prefs` exists so far: a `user_pref(...)` parser an
 editor that round-trips files byte-for-byte, so edits never reformat the user's file.
 
 ```sh
-bun test
+npm install
+npm test
 ```
 
 ## Plan
@@ -15,5 +16,5 @@ bun test
 - **v0.1** (macOS, Firefox): profile discovery, parsers, defaults from `omni.ja`,
   three-way table, edit `user.js`, lock check → diff → backup → atomic write,
   loopback-only server with session token.
-- **v0.2**: Windows, Linux, Flatpak, Snap, forks; single-binary builds from CI.
+- **v0.2**: Windows, Linux, Flatpak, Snap, forks; single executables from CI (Node SEA).
 - **v0.3**: pref descriptions bundle built in CI.
