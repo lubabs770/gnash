@@ -1,11 +1,13 @@
-// Live mode: drive a real Firefox through Marionette (its remote-control protocol)
-// so pref changes show up immediately. Firefox must be started with --marionette.
+// Live mode: drive a scratch copy of the profile in a real Firefox through Marionette
+// (its remote-control protocol), so prefs and CSS changes show up immediately.
 import { spawn } from "node:child_process";
-import { readFile, stat } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { connect, type Socket } from "node:net";
-import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import type { PrefValue } from "@gnash/prefs";
+import { pathToFileURL } from "node:url";
+import { parsePrefs, toMap, type PrefValue } from "@gnash/prefs";
 import type { Profile } from "./profiles.ts";
 
 export class LiveClosedError extends Error {}
@@ -105,21 +107,61 @@ else if (typeof v === "number") P.setIntPref(n, v);
 else P.setStringPref(n, v);
 return true;`;
 
+// Swaps gnash's userChrome sheet in every browser window, and in windows opened later.
+// State lives on the hidden window so it outlives this script's sandbox.
+const CHROME_CSS_SCRIPT = `
+const [uri] = arguments, G = Services.appShell.hiddenDOMWindow;
+const st = G.__gnash || (G.__gnash = { chrome: null, content: null, listener: null });
+const swap = (w) => { const u = w.windowUtils;
+  if (st.chrome) try { u.removeSheetUsingURIString(st.chrome, u.USER_SHEET); } catch (e) {}
+  if (uri) u.loadSheetUsingURIString(uri, u.USER_SHEET); };
+for (const w of Services.wm.getEnumerator("navigator:browser")) swap(w);
+st.chrome = uri;
+if (!st.listener) {
+  st.listener = { onOpenWindow(x) { const w = x.docShell.domWindow;
+    w.addEventListener("load", () => { if (st.chrome) w.windowUtils.loadSheetUsingURIString(st.chrome, w.windowUtils.USER_SHEET); }, { once: true }); },
+    onCloseWindow() {} };
+  Services.wm.addListener(st.listener);
+}
+return true;`;
+
+// Swaps gnash's userContent sheet in the global style sheet service (reaches web pages).
+const CONTENT_CSS_SCRIPT = `
+const [uri] = arguments, G = Services.appShell.hiddenDOMWindow;
+const st = G.__gnash || (G.__gnash = { chrome: null, content: null, listener: null });
+const sss = Cc["@mozilla.org/content/style-sheet-service;1"].getService(Ci.nsIStyleSheetService);
+if (st.content) { const old = Services.io.newURI(st.content); if (sss.sheetRegistered(old, sss.USER_SHEET)) sss.unregisterSheet(old, sss.USER_SHEET); }
+if (uri) sss.loadAndRegisterSheet(Services.io.newURI(uri), sss.USER_SHEET);
+st.content = uri;
+return true;`;
+
 export type LiveValue = { name: string; value: PrefValue | null; def: PrefValue | null; hasUser: boolean };
+export type SyncResult = {
+  applied: number;
+  changed: number;
+  unknown: string[];
+  /** 1-based lines that mention user_pref but didn't parse, or prefs Firefox refused */
+  errors: { line?: number; name?: string; message: string }[];
+};
 
 export class LiveSession {
   /** User value each touched pref had before gnash changed it; null = it had none. */
   readonly originals = new Map<string, PrefValue | null>();
-
   readonly profileId: string;
+  /** The scratch copy Firefox runs on; CSS versions are written into its chrome/ folder. */
+  readonly scratchDir: string;
   private readonly m: Marionette;
+  private synced = new Map<string, PrefValue>();
+  private cssFiles: Partial<Record<CssKind, string>> = {};
+  private cssVersion = 0;
 
-  constructor(profileId: string, m: Marionette) {
+  constructor(profileId: string, m: Marionette, scratchDir = "") {
     this.profileId = profileId;
     this.m = m;
+    this.scratchDir = scratchDir;
   }
 
-  static async open(profileId: string, m: Marionette): Promise<LiveSession> {
+  static async open(profileId: string, m: Marionette, scratchDir = ""): Promise<LiveSession> {
     try {
       await m.command("WebDriver:NewSession", { capabilities: {} });
       await m.command("Marionette:SetContext", { value: "chrome" });
@@ -127,7 +169,7 @@ export class LiveSession {
       m.close(); // free Firefox's single Marionette slot
       throw e;
     }
-    return new LiveSession(profileId, m);
+    return new LiveSession(profileId, m, scratchDir);
   }
 
   get isClosed(): boolean {
@@ -165,14 +207,97 @@ export class LiveSession {
     for (const n of names) this.originals.delete(n);
   }
 
+  /** What Firefox already applied from user.js at startup; later syncs diff against it. */
+  primeUserJs(text: string): void {
+    this.synced = toMap(parsePrefs(text));
+  }
+
+  /** Make live Firefox match a user.js text: set what changed, clear what was removed. */
+  async syncUserJs(text: string): Promise<SyncResult> {
+    const desired = toMap(parsePrefs(text));
+    const errors: SyncResult["errors"] = unparsedLines(text).map((line) => ({ line, message: "didn't parse" }));
+    const names = [...new Set([...desired.keys(), ...this.synced.keys()])];
+    const current = new Map((await this.read(names)).map((v) => [v.name, v]));
+    const unknown: string[] = [];
+    let changed = 0;
+    for (const [name, value] of desired) {
+      const cur = current.get(name);
+      if (cur && cur.value === null && cur.def === null) unknown.push(name);
+      if (cur?.value === value) continue;
+      try {
+        await this.set(name, value);
+        changed++;
+      } catch (e) {
+        if (!(e instanceof LiveError)) throw e;
+        const existing = cur?.def ?? cur?.value;
+        // Firefox reports a type clash as NS_ERROR_UNEXPECTED; say what it expects instead.
+        const message = /NS_ERROR_UNEXPECTED/.test(e.message) && existing != null
+          ? `Firefox expects ${typeof existing === "number" ? "an integer" : typeof existing === "boolean" ? "true or false" : "a string"}`
+          : e.message.replace(/^[^:]*: /, "");
+        errors.push({ name, message });
+      }
+    }
+    for (const name of this.synced.keys()) {
+      if (desired.has(name)) continue;
+      await this.set(name, null); // removed from user.js: back to the default
+      changed++;
+    }
+    this.synced = desired;
+    return { applied: desired.size, changed, unknown, errors };
+  }
+
+  /**
+   * Replace the live userChrome ("chrome") or userContent ("content") sheet. The CSS is written as a
+   * real file inside the copy's chrome/ folder, so relative @imports resolve like they do for Firefox.
+   */
+  async syncCss(kind: CssKind, css: string): Promise<void> {
+    let uri: string | null = null;
+    const prev = this.cssFiles[kind];
+    if (css.trim()) {
+      const file = join(this.scratchDir, "chrome", `.gnash-${kind}-${++this.cssVersion}.css`);
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(file, css);
+      this.cssFiles[kind] = file;
+      uri = pathToFileURL(file).href;
+    } else delete this.cssFiles[kind];
+    await this.exec(kind === "chrome" ? CHROME_CSS_SCRIPT : CONTENT_CSS_SCRIPT, [uri]);
+    if (prev) await rm(prev, { force: true });
+  }
+
+  /** PNG (base64) of the front browser window, chrome included. */
+  async screenshot(): Promise<string> {
+    const r = (await this.m.command("WebDriver:TakeScreenshot", { full: false })) as { value: string };
+    return r.value;
+  }
+
+  /** Quit the scratch Firefox and delete its copy of the profile. */
   async stop(): Promise<void> {
     try {
-      await this.revert();
-      await this.m.command("WebDriver:DeleteSession");
+      await Promise.race([this.m.command("Marionette:Quit", { flags: ["eForceQuit"] }), sleep(3000)]);
+    } catch {
+      // Firefox closing the socket while quitting is the expected outcome
     } finally {
       this.m.close();
     }
+    if (this.scratchDir) {
+      await sleep(500); // let Firefox finish exiting before its files go
+      await rm(this.scratchDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+    }
   }
+}
+
+export type CssKind = "chrome" | "content";
+
+/** 1-based numbers of uncommented lines that mention user_pref( but held no parsed statement. */
+export function unparsedLines(text: string): number[] {
+  const starts = new Set<number>();
+  for (const p of parsePrefs(text)) starts.add(text.slice(0, p.start).split("\n").length);
+  const out: number[] = [];
+  text.split("\n").forEach((l, i) => {
+    const t = l.trim();
+    if (/\buser_pref\s*\(/.test(t) && !/^(\/\/|#|\/?\*)/.test(t) && !starts.has(i + 1)) out.push(i + 1);
+  });
+  return out;
 }
 
 /** Firefox binary for a profile's install. */
@@ -183,33 +308,53 @@ export function firefoxBinary(p: Profile): string | undefined {
   return join(dir, process.platform === "win32" ? "firefox.exe" : "firefox");
 }
 
-/** Launch Firefox on this profile with Marionette on, then connect. */
+const COPY = ["prefs.js", "user.js", "xulstore.json", "containers.json", "extensions.json", "extensions", "chrome"];
+
+/**
+ * Fresh scratch copy of the profile's look-and-feel: prefs, toolbar layout, extensions, chrome/ assets.
+ * userChrome.css/userContent.css are left out; gnash injects them, so edits fully replace them.
+ */
+export async function makeScratchProfile(p: Profile): Promise<string> {
+  const scratch = join(tmpdir(), `gnash-live-${p.id}`);
+  await rm(scratch, { recursive: true, force: true });
+  await mkdir(scratch, { recursive: true });
+  for (const name of COPY) {
+    await cp(join(p.dir, name), join(scratch, name), {
+      recursive: true,
+      filter: (src) => !/[\\/]chrome[\\/](userChrome|userContent)\.css$/.test(src),
+    }).catch((e: NodeJS.ErrnoException) => {
+      if (e.code !== "ENOENT") throw e;
+    });
+  }
+  return scratch;
+}
+
+/** Launch Firefox on a scratch copy of this profile with Marionette on, then connect. */
 export async function launchLive(p: Profile, timeoutMs = 45_000): Promise<LiveSession> {
   const bin = firefoxBinary(p);
   if (!bin) throw new LiveError("Couldn't find this profile's Firefox install");
-  const portFile = join(p.dir, "MarionetteActivePort");
+  const scratch = await makeScratchProfile(p);
   const started = Date.now();
-  // --no-remote: never hand off to another running Firefox; this must be a fresh instance.
+  // --no-remote: always a separate instance, even with your everyday Firefox open.
   // MOZ_REMOTE_ALLOW_SYSTEM_ACCESS: Firefox 160 refuses chrome-context scripts (needed for Services.prefs) without it.
-  spawn(bin, ["--marionette", "--no-remote", "--profile", p.dir], {
+  spawn(bin, ["--marionette", "--no-remote", "--profile", scratch], {
     detached: true,
     stdio: "ignore",
     env: { ...process.env, MOZ_REMOTE_ALLOW_SYSTEM_ACCESS: "1" },
   }).unref();
 
+  const portFile = join(scratch, "MarionetteActivePort");
   let lastError: unknown;
   while (Date.now() - started < timeoutMs) {
     await sleep(500);
     let m: Marionette;
     try {
-      // Firefox writes this file once Marionette listens; ignore one left over from an earlier run.
-      if ((await stat(portFile)).mtimeMs < started - 1000) continue;
       m = await Marionette.connect(Number((await readFile(portFile, "utf8")).trim()));
     } catch (e) {
       lastError = e; // not up yet: retry
       continue;
     }
-    return LiveSession.open(p.id, m); // Firefox answered; its refusals are final, not retried
+    return LiveSession.open(p.id, m, scratch); // Firefox answered; its refusals are final, not retried
   }
   throw new LiveError(`Firefox didn't start remote control in time${lastError ? ` (${String(lastError)})` : ""}`);
 }

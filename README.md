@@ -1,7 +1,7 @@
 # gnash
 
-A local web UI for seeing and safely editing Firefox's `user.js`. For every pref it
-shows the install's default, the `prefs.js` value and the `user.js` value side by side.
+A local studio for Firefox's `user.js`, `userChrome.css` and `userContent.css`: edit them
+as much as you like and watch a real Firefox change as you type.
 
 `about:config` edits `prefs.js` only, has no descriptions, and never tells you a
 `user.js` line is overriding something. gnash does.
@@ -15,22 +15,28 @@ npm install
 npm start
 ```
 
-Your browser opens on a one-time link. Pick a profile, filter, edit, review the
-diff, apply.
+Your browser opens on a one-time link. Pick a profile, open the Studio, and turn on
+Live.
 
 ## What it does
+
+**Studio**: an editor for `user.js`, `userChrome.css` and `userContent.css`, with
+syntax highlighting, pref-name autocomplete, and a note on each `user.js` line (its
+default, "= default", "not a known pref", overridden lines, type errors). ⌘S saves,
+with a backup.
+
+**Live**: opens a copy of your profile (prefs, toolbar layout, extensions, `chrome/`
+assets) in a second Firefox window with remote control on. Every edit shows up there
+as you type, whether you type in gnash or save from your own editor: gnash watches the
+files. Your everyday Firefox keeps running and isn't touched; nothing reaches your
+real profile until you save. Closing the live copy quits it and deletes the copy.
+The copy shows a robot icon and striped address bar (Firefox's remote-control mode),
+and while it's open, other programs on your computer could also control it.
 
 **Customize**: sliders, toggles and choosers for about 30 curated prefs (density,
 interface scale, vertical tabs, fonts, colors, scrolling, tab behavior, sponsored
 stuff), next to a simulated Firefox window that updates as you drag. Curated controls
 live in [`data/controls.json`](data/controls.json).
-
-**Live**: flip the Live switch and gnash starts Firefox on the profile with
-remote control on (Marionette), then applies each change in real Firefox as you
-make it. Save keeps changes in `user.js`; anything unsaved is undone when you turn
-Live off or quit gnash. Firefox must not already be running on that profile, and it
-shows a robot icon and striped address bar until you restart it normally. While Live
-is on, other programs on your computer could also control that Firefox.
 
 **All prefs**: the full three-way table, with toggles for booleans and typed editors
 for everything else.
@@ -41,8 +47,9 @@ Under the hood:
   Profile locations live in [`data/paths.json`](data/paths.json).
 - Reads defaults from the profile's own install (`omni.ja`), so values match your
   exact Firefox version.
-- Edits `user.js` only. Your comments, order and formatting are kept; new prefs go
-  under a `// --- added by gnash ---` section. A symlinked `user.js` stays linked.
+- Customize and All prefs edit `user.js` without touching your comments, order or
+  formatting; new prefs go under a `// --- added by gnash ---` section. Symlinked files
+  (say, from a dotfiles repo) stay linked, and gnash watches their real location.
 - Every write: you review a diff → `user.js` and `prefs.js` are copied to
   `.gnash-backups/<time>/` in the profile (last 20 kept) → atomic write. If
   `user.js` changed since you reviewed, the write is refused.
@@ -59,7 +66,8 @@ The server writes into your browser profile, so it trusts nothing:
 - The UI never sees file paths, only profile IDs the server issued.
 - Strict Content-Security-Policy; file contents are rendered as text, never HTML.
 - Shuts down after 10 minutes with no open tab, undoing unsaved live changes.
-- Live mode is off until you turn it on, and talks to Firefox only over loopback.
+- Live mode is off until you turn it on, runs on a throwaway copy, and talks to that
+  Firefox only over loopback.
 
 ## Limits
 

@@ -184,7 +184,45 @@
   .form { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; }
   .toast { position: fixed; right: 16px; bottom: 76px; background: var(--fg); color: var(--bg); padding: 10px 14px; border-radius: 8px; max-width: calc(100vw - 32px); z-index: 7; }
 
+  /* studio */
+  .studio2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr); gap: 16px; align-items: start; }
+  .edcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; height: calc(100vh - 150px); min-height: 420px; }
+  .ftabs { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--line); background: var(--soft); flex-wrap: wrap; }
+  .ftabs button { border: 1px solid transparent; border-bottom: 0; border-radius: 7px 7px 0 0; background: none; padding: 6px 12px; font: 13px ui-monospace, Menlo, monospace; color: var(--muted); }
+  .ftabs button[aria-selected=true] { background: var(--panel); border-color: var(--line); color: var(--fg); margin-bottom: -1px; }
+  .ftabs button .dirty { color: var(--pend); margin-left: 4px; }
+  .edbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+  .ed { position: relative; flex: 1; min-height: 0; display: flex; font: 13px/20px ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  .ed-gut { width: 46px; flex: none; overflow: hidden; background: var(--soft); color: var(--muted); text-align: right; border-right: 1px solid var(--line); user-select: none; }
+  .ed-gut div { padding: 10px 8px 10px 0; white-space: pre; }
+  .ed-main { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+  .ed-hl, .ed-ta { margin: 0; padding: 10px 12px; font: inherit; white-space: pre; tab-size: 2; letter-spacing: normal; }
+  .ed-hl { position: absolute; inset: 0 auto auto 0; pointer-events: none; color: var(--fg); min-width: 100%; }
+  .ed-ta { position: absolute; inset: 0; width: 100%; height: 100%; resize: none; border: 0; outline: none; background: transparent; color: transparent; caret-color: var(--fg); overflow: auto; }
+  .ed-ta::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+  .t-c { color: #8a8f98; font-style: italic; } .t-s { color: #0a7d4f; } .t-n { color: #b45309; } .t-k { color: #7c3aed; } .t-f { color: #1d4ed8; }
+  .t-sel { color: #9a3412; } .t-p { color: #1d4ed8; } .t-at { color: #7c3aed; } .t-imp { color: #be123c; font-weight: 600; }
+  @media (prefers-color-scheme: dark) {
+    .t-s { color: #6ee7b7; } .t-n { color: #fbbf24; } .t-k { color: #c4b5fd; } .t-f { color: #93c5fd; }
+    .t-sel { color: #fdba74; } .t-p { color: #93c5fd; } .t-at { color: #c4b5fd; } .t-imp { color: #fda4af; }
+  }
+  .hint { color: var(--muted); font-style: italic; opacity: .85; margin-left: 2.5ch; }
+  .hint.warn { color: var(--pend); opacity: 1; } .hint.err { color: var(--del-fg); opacity: 1; } .hint.same { opacity: .55; }
+  .ac { position: absolute; z-index: 3; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px -8px rgb(0 0 0 / .3); min-width: 280px; max-width: 520px; overflow: hidden; font: 12.5px ui-monospace, Menlo, monospace; }
+  .ac div { padding: 4px 10px; display: flex; gap: 12px; justify-content: space-between; cursor: pointer; white-space: nowrap; }
+  .ac div span:last-child { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+  .ac div[aria-selected=true] { background: var(--accent); color: var(--accent-fg); }
+  .ac div[aria-selected=true] span:last-child { color: inherit; opacity: .8; }
+  .banner { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--warn-bg); border-bottom: 1px solid var(--warn-line); padding: 7px 10px; font-size: 13px; }
+  .livecard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 72px; }
+  .livecard h2 { margin: 0; font-size: 14px; }
+  .livecard p { margin: 0; color: var(--muted); font-size: 13px; }
+  .shot { width: 100%; border-radius: 8px; border: 1px solid var(--line); background: var(--soft); display: block; cursor: zoom-in; min-height: 120px; object-fit: contain; }
+  .shot.big { position: fixed; inset: 16px; width: calc(100% - 32px); height: calc(100% - 32px); z-index: 8; cursor: zoom-out; box-shadow: 0 20px 60px rgb(0 0 0 / .4); background: var(--panel); }
+  .livestat { font: 12.5px ui-monospace, Menlo, monospace; color: var(--muted); }
+  .livestat b { color: var(--live); font-weight: 600; }
   @media (max-width: 900px) {
+    .studio2 { grid-template-columns: 1fr; } .livecard { position: static; }
     .studio { grid-template-columns: 1fr; }
     .stage { position: static; order: -1; }
     .frame { height: 420px; }
@@ -196,7 +234,8 @@
 <header>
   <h1>gnash</h1>
   <div class="tabs" role="tablist">
-    <button role="tab" id="tab-customize" aria-selected="true" aria-controls="view-customize">Customize</button>
+    <button role="tab" id="tab-studio" aria-selected="true" aria-controls="view-studio">Studio</button>
+    <button role="tab" id="tab-customize" aria-selected="false" aria-controls="view-customize">Customize</button>
     <button role="tab" id="tab-all" aria-selected="false" aria-controls="view-all">All prefs</button>
   </div>
   <div class="grow"></div>
@@ -210,7 +249,25 @@
 <main>
   <div id="notices"></div>
 
-  <section id="view-customize" role="tabpanel" aria-labelledby="tab-customize">
+  <section id="view-studio" role="tabpanel" aria-labelledby="tab-studio">
+    <div class="studio2">
+      <div class="edcard">
+        <div class="ftabs" role="tablist" id="ftabs"></div>
+        <div id="edBanner"></div>
+        <div class="edbar"><span id="edStatus">Not live. Save, then restart Firefox, or turn on Live to see changes as you type.</span><div class="grow"></div>
+          <button class="link" id="edRevert">Revert to saved</button><button id="edSave" class="primary">Save <span class="mono" style="opacity:.75">⌘S</span></button></div>
+        <div class="ed" id="ed">
+          <div class="ed-gut"><div id="edGut"></div></div>
+          <div class="ed-main"><pre class="ed-hl" id="edHl" aria-hidden="true"></pre>
+            <textarea class="ed-ta" id="edTa" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-label="File editor"></textarea>
+            <div class="ac" id="ac" role="listbox" hidden></div></div>
+        </div>
+      </div>
+      <div class="livecard" id="livecard"></div>
+    </div>
+  </section>
+
+  <section id="view-customize" role="tabpanel" aria-labelledby="tab-customize" hidden>
     <div class="studio">
       <div class="groups" id="groups"></div>
       <div class="stage">
@@ -266,15 +323,15 @@
   <div class="dlg">
     <h2>Go live in Firefox?</h2>
     <div class="body">
-      <p>gnash will start Firefox on this profile with remote control turned on, and change prefs in it as you move the controls.</p>
+      <p>gnash opens a second Firefox window running a <strong>copy</strong> of this profile: your prefs, user.js, toolbar layout, extensions and chrome/ files. Every edit shows up there as you type. Your everyday Firefox keeps running and isn't touched.</p>
       <ul>
-        <li>Quit Firefox first if it's using this profile.</li>
-        <li>Firefox shows a robot icon and a striped address bar until you restart it normally.</li>
-        <li>While live, other programs on this computer could also control that Firefox.</li>
-        <li>Changes you don't save are undone when you turn live off or close gnash.</li>
+        <li>Nothing changes in your real profile until you save.</li>
+        <li>The copy shows a robot icon and a striped address bar; that's Firefox's remote-control mode.</li>
+        <li>While live, other programs on this computer could also control that copy.</li>
+        <li>Turning Live off closes the copy.</li>
       </ul>
     </div>
-    <div class="foot"><button id="cancelLive">Cancel</button><button id="confirmLive" class="primary">Start Firefox</button></div>
+    <div class="foot"><button id="cancelLive">Cancel</button><button id="confirmLive" class="primary">Open live copy</button></div>
   </div>
 </dialog>
 
@@ -297,7 +354,7 @@ const $ = (s) => document.querySelector(s);
 const LIMIT = 400;
 const state = {
   profiles: [], id: null, data: null, byName: new Map(), controls: [],
-  pending: new Map(), filter: "changed", q: "", editing: null, hash: null, view: "customize",
+  pending: new Map(), filter: "changed", q: "", editing: null, hash: null, view: "studio",
   live: false, liveDefaults: new Map(), liveTimers: new Map(), liveConfirmed: false,
 };
 
@@ -415,6 +472,8 @@ async function selectProfile(id) {
   state.id = id; state.editing = null;
   store.set("gnash.profile", id);
   await reload();
+  await loadFiles();
+  openEvents();
 }
 
 async function reload() {
@@ -430,11 +489,12 @@ function renderNotices() {
   const n = $("#notices");
   n.replaceChildren();
   const d = state.data;
-  if (d.running && !state.live) n.append(el("div", { class: "notice" }, "Firefox is running on this profile. Saved changes apply the next time it starts. To see them live, quit Firefox and turn on Live."));
+  if (d.running && !state.live) n.append(el("div", { class: "notice" }, "Firefox is running on this profile. Saved changes apply the next time it starts; turn on Live to see them now in a separate copy."));
   if (!d.defaultsFound) n.append(el("div", { class: "notice" }, "Couldn't read default values from this profile's Firefox install. Start Firefox once with this profile, then reload."));
 }
 
 function renderAll() {
+  renderStudio();
   renderControls();
   renderPreview();
   if (state.view === "all") renderTable();
@@ -491,7 +551,7 @@ function setLiveUi(on, busyText) {
 
 async function goLive() {
   if (!state.id) return;
-  setLiveUi(false, "Starting Firefox…");
+  setLiveUi(false, "Opening live copy…");
   try {
     await api(`/api/profiles/${state.id}/live`, {});
     await enterLive(false);
@@ -510,15 +570,19 @@ async function enterLive(resumed) {
     state.liveDefaults = new Map(vals.map((v) => [v.name, v.def]));
   } catch (e) { liveFailed(e); return; }
   if (!resumed) for (const [n, v] of state.pending) await api("/api/live/set", { name: n, value: v }).catch(liveFailed);
+  for (const [k, f] of Object.entries(studio.files ?? {})) if (f.dirty) await syncNow(k); // Firefox starts from what's on disk
+  requestShot();
   renderNotices();
   renderAll();
-  if (!resumed) toast("Live. Changes now show up in Firefox as you make them.");
+  if (!resumed) toast("Live copy open. Edits show up in that window as you type.");
 }
 
 async function leaveLive() {
   setLiveUi(false, "Stopping…");
   await api("/api/live/stop", {}).catch(() => {});
   state.live = false;
+  studio.sync = {};
+  studio.shot = "";
   setLiveUi(false);
   renderNotices();
   renderAll();
@@ -824,10 +888,359 @@ async function discard() {
   renderAll();
 }
 
+// --- studio ----------------------------------------------------------------
+
+const FILE_LABEL = { userJs: "user.js", userChrome: "userChrome.css", userContent: "userContent.css" };
+const STYLESHEETS_PREF = "toolkit.legacyUserProfileCustomizations.stylesheets";
+const studio = { files: null, cur: "userJs", sync: {}, syncTimer: 0, shotBusy: false, shotAgain: false, shot: "", es: null, names: [], ac: null };
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const span = (cls, s) => `<span class="${cls}">${esc(s)}</span>`;
+const ta = () => $("#edTa");
+
+async function loadFiles() {
+  if (!state.id) return;
+  const files = await api(`/api/profiles/${state.id}/files`);
+  studio.files = Object.fromEntries(Object.entries(files).map(([k, f]) => [k, { text: f.text, base: f.text, hash: f.hash, dirty: false, disk: null }]));
+  studio.sync = {};
+  studio.names = [...new Set([...state.data.rows.map((r) => r.name), ...state.controls.map((c) => c.pref)])].sort();
+  renderStudio(true);
+}
+
+function openEvents() {
+  studio.es?.close();
+  if (!state.id) return;
+  const es = new EventSource(`/api/profiles/${state.id}/events`);
+  studio.es = es;
+  es.addEventListener("file-changed", (ev) => {
+    const d = JSON.parse(ev.data);
+    const f = studio.files?.[d.file];
+    if (!f) return;
+    if (!f.dirty) Object.assign(f, { text: d.text, base: d.text, hash: d.hash, disk: null });
+    else f.disk = d; // unsaved edits here: let the user choose
+    if (d.sync && !d.sync.error) studio.sync[d.file] = d.sync;
+    if (d.sync?.error) toast(d.sync.error);
+    renderStudio(true);
+    if (state.live) requestShot();
+    if (d.file === "userJs") reload().catch(() => {});
+  });
+}
+
+// Syntax highlighting: one regex pass, every piece escaped.
+function hlPrefs(text) {
+  const re = /(\/\*[\s\S]*?(?:\*\/|$))|(\/\/[^\n]*|#[^\n]*)|("(?:[^"\\\n]|\\.)*"?|'(?:[^'\\\n]|\\.)*'?)|\b(true|false)\b|([-+]?\b\d+\b)|\b(user_pref|pref|lockPref|sticky_pref)\b/g;
+  let out = "", last = 0, m;
+  while ((m = re.exec(text))) {
+    out += esc(text.slice(last, m.index));
+    const cls = m[1] || m[2] ? "t-c" : m[3] ? "t-s" : m[4] ? "t-k" : m[5] ? "t-n" : "t-f";
+    out += span(cls, m[0]);
+    last = re.lastIndex;
+  }
+  return out + esc(text.slice(last));
+}
+
+function hlCss(text) {
+  const re = /(\/\*[\s\S]*?(?:\*\/|$))|("(?:[^"\\\n]|\\.)*"?|'(?:[^'\\\n]|\\.)*'?)|(@[\w-]+)|(!important)|([{}])/g;
+  let out = "", last = 0, depth = 0, m;
+  const plain = (s) => depth === 0
+    ? (s.trim() ? s.replace(/^(\s*)([\s\S]*?)(\s*)$/, (_, a, b, c) => esc(a) + span("t-sel", b) + esc(c)) : esc(s))
+    : esc(s).replace(/(^|[;{\s])([\w-]+)(\s*:)(?!:)/g, (_, a, p, c) => `${a}<span class="t-p">${p}</span>${c}`);
+  while ((m = re.exec(text))) {
+    out += plain(text.slice(last, m.index));
+    if (m[5] === "{") depth++;
+    else if (m[5] === "}") depth = Math.max(0, depth - 1);
+    out += m[1] ? span("t-c", m[0]) : m[2] ? span("t-s", m[0]) : m[3] ? span("t-at", m[0]) : m[4] ? span("t-imp", m[0]) : esc(m[0]);
+    last = re.lastIndex;
+  }
+  return out + plain(text.slice(last));
+}
+
+const PREF_LINE = /^\s*user_pref\s*\(\s*(["'])((?:\\.|(?!\1).)*)\1\s*,\s*(.*?)\s*\)\s*;?/;
+function parseLit(s) {
+  if (s === "true" || s === "false") return s === "true";
+  if (/^[-+]?\d+$/.test(s)) return Number(s);
+  try { return JSON.parse(s.replace(/^'(.*)'$/, (_, x) => JSON.stringify(x))); } catch { return undefined; }
+}
+
+/** Per-line notes for user.js: default value, "same as default", unknown pref, errors from live Firefox. */
+function prefHints(text) {
+  const hints = new Map();
+  const res = studio.sync.userJs;
+  const unknown = new Set(res?.unknown ?? []);
+  const refused = new Map((res?.errors ?? []).filter((e) => e.name).map((e) => [e.name, e.message]));
+  const badLines = new Set((res?.errors ?? []).filter((e) => e.line).map((e) => e.line));
+  const lines = text.split("\n");
+  const lastLine = new Map();
+  lines.forEach((line, i) => { const m = PREF_LINE.exec(line); if (m) lastLine.set(m[2], i); });
+  lines.forEach((line, i) => {
+    if (badLines.has(i + 1)) return hints.set(i, ["err", "✗ didn't parse"]);
+    const m = PREF_LINE.exec(line);
+    if (!m) return;
+    const name = m[2], val = parseLit(m[3]);
+    if (lastLine.get(name) !== i) return hints.set(i, ["same", `overridden by line ${lastLine.get(name) + 1}`]);
+    if (refused.has(name)) return hints.set(i, ["err", `✗ ${refused.get(name)}`]);
+    const known = state.byName.get(name);
+    const def = state.liveDefaults.has(name) ? state.liveDefaults.get(name) : known?.def;
+    if (unknown.has(name) || (!known && !state.liveDefaults.has(name) && !studio.names.includes(name))) return hints.set(i, ["warn", "⚠ not a known pref"]);
+    if (def === undefined || def === null) return;
+    if (val === def) hints.set(i, ["same", "= default"]);
+    else if (val !== undefined && typeof val !== typeof def) hints.set(i, ["warn", `⚠ default is ${typeof def === "number" ? "an integer" : `a ${typeof def}`}: ${fmt(def)}`]);
+    else hints.set(i, ["", `default ${fmt(def)}`]);
+  });
+  return hints;
+}
+
+function renderEditorLayer() {
+  const f = studio.files[studio.cur];
+  const html = studio.cur === "userJs" ? hlPrefs(f.text) : hlCss(f.text);
+  const hints = studio.cur === "userJs" ? prefHints(f.text) : new Map();
+  const lines = html.split("\n");
+  for (const [i, [cls, msg]] of hints) if (lines[i] !== undefined) lines[i] += `<span class="hint ${cls}">${esc(msg)}</span>`;
+  $("#edHl").innerHTML = lines.join("\n") + "\n";
+  $("#edGut").textContent = f.text.split("\n").map((_, i) => i + 1).join("\n");
+}
+
+function renderStudio(resetText) {
+  if (!studio.files) return;
+  const f = studio.files[studio.cur];
+  $("#ftabs").replaceChildren(...Object.keys(FILE_LABEL).map((k) => el("button", { role: "tab", "aria-selected": String(k === studio.cur),
+    onclick: () => { studio.cur = k; hideAc(); renderStudio(true); ta().focus(); } },
+    FILE_LABEL[k], studio.files[k].dirty ? el("span", { class: "dirty", title: "Unsaved" }, "●") : null)));
+  if (resetText && ta().value !== f.text) ta().value = f.text;
+  renderEditorLayer();
+  syncScroll();
+
+  const banner = $("#edBanner");
+  banner.replaceChildren();
+  if (f.disk) banner.append(el("div", { class: "banner" }, `${FILE_LABEL[studio.cur]} changed on disk while you had unsaved edits.`,
+    el("button", { onclick: () => { Object.assign(f, { text: f.disk.text, base: f.disk.text, hash: f.disk.hash, dirty: false, disk: null }); renderStudio(true); scheduleSync(0); } }, "Load disk version"),
+    el("button", { class: "link", onclick: () => { f.hash = f.disk.hash; f.disk = null; renderStudio(); } }, "Keep mine")));
+  if (studio.cur !== "userJs" && f.base.trim() && !stylesheetsOn()) banner.append(el("div", { class: "banner" },
+    "Normal Firefox ignores this file until userChrome/userContent loading is on.",
+    el("button", { onclick: enableStylesheets }, "Turn it on in user.js")));
+
+  $("#edStatus").replaceChildren(statusLine());
+  $("#edSave").disabled = !f.dirty;
+  $("#edRevert").hidden = !f.dirty;
+  renderLiveCard();
+}
+
+function statusLine() {
+  const f = studio.files[studio.cur];
+  const unsaved = f.dirty ? " · unsaved" : "";
+  if (!state.live) return document.createTextNode(`Not live${unsaved}. Save, then restart Firefox, or turn on Live to see changes as you type.`);
+  const r = studio.sync[studio.cur];
+  let detail = "in sync";
+  if (r && "applied" in r) detail = [`${r.applied} prefs`, r.changed ? `${r.changed} just applied` : null,
+    r.unknown.length ? `${r.unknown.length} unknown` : null, r.errors.length ? `${r.errors.length} error${r.errors.length > 1 ? "s" : ""}` : null].filter(Boolean).join(" · ");
+  else if (r) detail = "CSS applied";
+  return el("span", { class: "livestat" }, el("b", {}, "● live"), ` ${detail}${unsaved}`);
+}
+
+function stylesheetsOn() {
+  const m = new RegExp(`user_pref\\(\\s*["']${STYLESHEETS_PREF.replace(/\./g, "\\.")}["']\\s*,\\s*true\\s*\\)`).test(studio.files.userJs.text);
+  return m || state.byName.get(STYLESHEETS_PREF)?.prefs === true;
+}
+
+async function enableStylesheets() {
+  const u = studio.files.userJs;
+  if (u.dirty) { studio.cur = "userJs"; renderStudio(true); return toast("Save or revert your user.js edits first."); }
+  const text = `${u.text}${u.text && !u.text.endsWith("\n") ? "\n" : ""}user_pref("${STYLESHEETS_PREF}", true);\n`;
+  try {
+    const r = await api(`/api/profiles/${state.id}/files/save`, { file: "userJs", text, hash: u.hash });
+    Object.assign(u, { text, base: text, hash: r.hash, dirty: false });
+    toast("Turned on. Firefox loads userChrome.css and userContent.css from its next start.");
+    renderStudio(true);
+  } catch (e) { toast(e.message); }
+}
+
+function onEdInput() {
+  const f = studio.files[studio.cur];
+  f.text = ta().value;
+  f.dirty = f.text !== f.base;
+  renderEditorLayer();
+  updateAc();
+  scheduleSync();
+  // Cheap partial refresh: tab dot, buttons, status.
+  $("#edSave").disabled = !f.dirty;
+  $("#edRevert").hidden = !f.dirty;
+  $("#edStatus").replaceChildren(statusLine());
+  const tab = $("#ftabs").children[Object.keys(FILE_LABEL).indexOf(studio.cur)];
+  if (tab && !!tab.querySelector(".dirty") !== f.dirty) renderStudio();
+}
+
+function scheduleSync(delay = 300, key = studio.cur) {
+  if (!state.live) return;
+  clearTimeout(studio.syncTimer);
+  studio.syncTimer = setTimeout(() => syncNow(key), delay);
+}
+
+async function syncNow(key) {
+  try {
+    studio.sync[key] = await api("/api/live/sync", { file: key, text: studio.files[key].text });
+    flashLive();
+    if (key === studio.cur) { renderEditorLayer(); $("#edStatus").replaceChildren(statusLine()); }
+    requestShot();
+  } catch (e) { liveFailed(e); }
+}
+
+async function requestShot() {
+  if (!state.live) return;
+  if (studio.shotBusy) { studio.shotAgain = true; return; }
+  studio.shotBusy = true;
+  try {
+    await new Promise((r) => setTimeout(r, 120)); // let Firefox repaint
+    const { png } = await api("/api/live/screenshot");
+    studio.shot = `data:image/png;base64,${png}`;
+    const img = $("#shot");
+    if (img) img.src = studio.shot;
+  } catch (e) { if (e.status === 410) liveFailed(e); }
+  studio.shotBusy = false;
+  if (studio.shotAgain) { studio.shotAgain = false; requestShot(); }
+}
+
+async function saveCur() {
+  const key = studio.cur, f = studio.files[key];
+  if (!f.dirty) return;
+  try {
+    const r = await api(`/api/profiles/${state.id}/files/save`, { file: key, text: f.text, hash: f.hash });
+    Object.assign(f, { base: f.text, hash: r.hash, dirty: false, disk: null });
+    toast(`Saved ${FILE_LABEL[key]}. Backup in .gnash-backups/${r.backup}`);
+    if (key === "userJs") reload().catch(() => {});
+    renderStudio();
+  } catch (e) {
+    if (e.status === 409) {
+      const fresh = (await api(`/api/profiles/${state.id}/files`))[key];
+      f.disk = { text: fresh.text, hash: fresh.hash };
+      renderStudio();
+    } else toast(e.message);
+  }
+}
+
+function revertCur() {
+  const f = studio.files[studio.cur];
+  Object.assign(f, { text: f.base, dirty: false });
+  renderStudio(true);
+  scheduleSync(0);
+}
+
+function renderLiveCard() {
+  const c = $("#livecard");
+  if (!state.live) {
+    c.replaceChildren(el("h2", {}, "See it live"),
+      el("p", {}, "Open a copy of this profile in a second Firefox window. Every keystroke in user.js, userChrome.css and userContent.css shows up there, whether you type here or save from your own editor. Your everyday Firefox isn't touched."),
+      el("div", {}, el("button", { class: "primary", onclick: () => state.id ? $("#liveDlg").showModal() : toast("Pick a profile first.") }, "Open live copy")));
+    return;
+  }
+  const img = el("img", { id: "shot", class: "shot", alt: "Screenshot of the live Firefox copy", title: "Click to enlarge", onclick: () => img.classList.toggle("big") });
+  if (studio.shot) img.src = studio.shot;
+  c.replaceChildren(el("h2", {}, "Live copy"),
+    el("p", {}, "The second Firefox window updates as you type. This is a snapshot of it."),
+    img,
+    el("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, el("button", { onclick: requestShot }, "Refresh snapshot"), el("button", { onclick: () => leaveLive() }, "Close live copy")));
+}
+
+// Scroll the highlight layer and gutter with the textarea.
+function syncScroll() {
+  const t = ta();
+  $("#edHl").style.transform = `translate(${-t.scrollLeft}px, ${-t.scrollTop}px)`;
+  $("#edGut").style.transform = `translateY(${-t.scrollTop}px)`;
+  if (studio.ac) placeAc();
+}
+
+// Autocomplete pref names inside user_pref("…
+function acContext() {
+  const t = ta();
+  if (studio.cur !== "userJs" || t.selectionStart !== t.selectionEnd) return null;
+  const before = t.value.slice(0, t.selectionStart);
+  const lineStart = before.lastIndexOf("\n") + 1;
+  const m = /user_pref\(\s*(["'])([^"'\s]*)$/.exec(before.slice(lineStart));
+  if (!m || m[2].length < 2) return null;
+  return { prefix: m[2], quote: m[1], from: t.selectionStart - m[2].length };
+}
+
+function updateAc() {
+  const ctx = acContext();
+  if (!ctx) return hideAc();
+  const p = ctx.prefix.toLowerCase();
+  const starts = [], has = [];
+  for (const n of studio.names) {
+    const l = n.toLowerCase();
+    if (l.startsWith(p)) starts.push(n); else if (l.includes(p)) has.push(n);
+    if (starts.length >= 8) break;
+  }
+  const items = [...starts, ...has].slice(0, 8).filter((n) => n !== ctx.prefix);
+  if (!items.length) return hideAc();
+  studio.ac = { ...ctx, items, sel: 0 };
+  renderAc();
+}
+
+function renderAc() {
+  const box = $("#ac");
+  box.hidden = false;
+  box.replaceChildren(...studio.ac.items.map((n, i) => {
+    const def = state.liveDefaults.get(n) ?? state.byName.get(n)?.def;
+    return el("div", { role: "option", "aria-selected": String(i === studio.ac.sel), onmousedown: (e) => { e.preventDefault(); acceptAc(i); } },
+      el("span", {}, n), el("span", {}, def === undefined || def === null ? "" : fmt(def)));
+  }));
+  placeAc();
+}
+
+let charW = 0;
+function placeAc() {
+  const t = ta();
+  if (!charW) { const m = el("span", { style: "position:absolute;visibility:hidden;white-space:pre;font:13px/20px ui-monospace,'SF Mono',Menlo,Consolas,monospace" }, "M".repeat(40)); document.body.append(m); charW = m.getBoundingClientRect().width / 40; m.remove(); }
+  const before = t.value.slice(0, studio.ac.from);
+  const line = before.split("\n").length - 1;
+  const col = before.length - before.lastIndexOf("\n") - 1;
+  const box = $("#ac");
+  box.style.top = `${10 + (line + 1) * 20 - t.scrollTop + 2}px`;
+  box.style.left = `${Math.max(0, 12 + col * charW - t.scrollLeft - 10)}px`;
+}
+
+function hideAc() { studio.ac = null; $("#ac").hidden = true; }
+
+function acceptAc(i) {
+  const ac = studio.ac, t = ta(), name = ac.items[i];
+  const lineEnd = t.value.indexOf("\n", t.selectionStart);
+  const rest = t.value.slice(t.selectionStart, lineEnd === -1 ? undefined : lineEnd);
+  const def = state.liveDefaults.get(name) ?? state.byName.get(name)?.def;
+  const val = def === undefined || def === null ? '""' : typeof def === "string" ? JSON.stringify(def) : String(def);
+  t.setSelectionRange(ac.from, rest.trim() === "" || /^["']?\s*\)?\s*;?\s*$/.test(rest) ? t.selectionStart + rest.length : t.selectionStart);
+  const fill = rest.trim() === "" || /^["']?\s*\)?\s*;?\s*$/.test(rest) ? `${name}${ac.quote}, ${val});` : name;
+  document.execCommand("insertText", false, fill); // keeps native undo
+  if (fill !== name) { const end = t.selectionStart - 2; t.setSelectionRange(end - val.length, end); }
+  hideAc();
+  onEdInput();
+}
+
+$("#edTa").addEventListener("input", onEdInput);
+$("#edTa").addEventListener("scroll", syncScroll);
+$("#edTa").addEventListener("click", () => (studio.ac ? updateAc() : null));
+$("#edTa").addEventListener("blur", () => setTimeout(hideAc, 100));
+$("#edTa").addEventListener("keydown", (e) => {
+  if (studio.ac) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      studio.ac.sel = (studio.ac.sel + (e.key === "ArrowDown" ? 1 : -1) + studio.ac.items.length) % studio.ac.items.length;
+      return renderAc();
+    }
+    if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); return acceptAc(studio.ac.sel); }
+    if (e.key === "Escape") { e.preventDefault(); return hideAc(); }
+  }
+  if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); document.execCommand("insertText", false, "  "); }
+});
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && state.view === "studio") { e.preventDefault(); saveCur(); }
+});
+$("#edSave").addEventListener("click", saveCur);
+$("#edRevert").addEventListener("click", revertCur);
+
 // --- wiring ----------------------------------------------------------------
 
 function setView(v) {
   state.view = v;
+  $("#tab-studio").setAttribute("aria-selected", String(v === "studio"));
+  $("#view-studio").hidden = v !== "studio";
   $("#tab-customize").setAttribute("aria-selected", String(v === "customize"));
   $("#tab-all").setAttribute("aria-selected", String(v === "all"));
   $("#view-customize").hidden = v !== "customize";
@@ -835,6 +1248,7 @@ function setView(v) {
   store.set("gnash.view", v);
   renderAll();
 }
+$("#tab-studio").addEventListener("click", () => setView("studio"));
 $("#tab-customize").addEventListener("click", () => setView("customize"));
 $("#tab-all").addEventListener("click", () => setView("all"));
 $("#profile").addEventListener("change", (e) => e.target.value && selectProfile(e.target.value).catch((err) => toast(err.message)));
@@ -875,7 +1289,8 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderPrev
 window.addEventListener("beforeunload", (e) => { if (state.pending.size) e.preventDefault(); });
 setInterval(() => fetch("/api/ping").catch(() => {}), 30_000);
 
-if (store.get("gnash.view") === "all") setView("all");
+state.view = "studio";
+if (["customize", "all"].includes(store.get("gnash.view"))) setView(store.get("gnash.view"));
 init().catch((e) => toast(e.message));
 </script>
 </body>

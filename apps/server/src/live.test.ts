@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { createServer, type AddressInfo, type Socket } from "node:net";
 import { describe, test } from "node:test";
 import CONTROLS from "../../../data/controls.json" with { type: "json" };
-import { LiveClosedError, LiveError, LiveSession, Marionette } from "./live.ts";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { LiveClosedError, LiveError, LiveSession, makeScratchProfile, Marionette, unparsedLines } from "./live.ts";
 
 /** A fake Firefox: speaks the Marionette framing and keeps a pref store. */
 async function fakeFirefox(prefs: Record<string, unknown>) {
@@ -35,6 +40,10 @@ async function fakeFirefox(prefs: Record<string, unknown>) {
           const { script, args } = params as { script: string; args: unknown[] };
           if (script.includes("getDefaultBranch")) {
             result = { value: (args[0] as string[]).map((n) => ({ name: n, value: prefs[n] ?? null, def: null, hasUser: n in prefs })) };
+          } else if (!script.includes("setIntPref")) {
+            const kind = script.includes("style-sheet-service") ? "content" : "chrome";
+            log.push(`css ${kind} ${args[0] ?? "none"}`);
+            result = { value: true };
           } else {
             const [n, v] = args as [string, unknown];
             if (n === "bad") {
@@ -48,6 +57,7 @@ async function fakeFirefox(prefs: Record<string, unknown>) {
           }
         }
         s.write(frame([1, id, null, result]));
+        if (name === "Marionette:Quit") s.end();
       }
     });
   });
@@ -74,9 +84,10 @@ describe("LiveSession", () => {
     s.keep(["c"]);
     assert.deepEqual(prefs, { a: 6, b: true, c: "x" });
 
-    await s.stop();
+    await s.revert();
     assert.deepEqual(prefs, { a: 1, c: "x" }); // a restored, b cleared, c kept
-    assert.ok(ff.log.includes("WebDriver:DeleteSession"));
+    await s.stop();
+    assert.ok(ff.log.includes("Marionette:Quit"));
     ff.kill();
   });
 
@@ -121,5 +132,60 @@ describe("LiveSession.open", () => {
     await assert.rejects(LiveSession.open("p", m), LiveError);
     await closed; // resolves only if gnash closed its end
     ff.kill();
+  });
+});
+
+describe("syncUserJs", () => {
+  test("sets changes, clears removed lines, reports unknown and unparsed", async () => {
+    const prefs: Record<string, unknown> = { a: 1, gone: true };
+    const ff = await fakeFirefox(prefs);
+    const s = await LiveSession.open("p", await Marionette.connect(ff.port));
+    s.primeUserJs('user_pref("a", 1);\nuser_pref("gone", true);\n');
+    const r = await s.syncUserJs('user_pref("a", 2);\nuser_pref("typo.pref", "x");\nuser_pref("broken", );\n// user_pref("commented", 1);\n');
+    assert.deepEqual(prefs, { a: 2, "typo.pref": "x" });
+    assert.deepEqual(r.unknown, ["typo.pref"]);
+    assert.deepEqual(r.errors, [{ line: 3, message: "didn't parse" }]);
+    assert.equal(r.changed, 3); // a set, typo.pref set, gone cleared
+    const again = await s.syncUserJs('user_pref("a", 2);\nuser_pref("typo.pref", "x");\n');
+    assert.equal(again.changed, 0); // nothing to do when Firefox already matches
+    ff.kill();
+  });
+
+  test("unparsedLines ignores comments", () => {
+    assert.deepEqual(unparsedLines('user_pref("ok", 1);\n  user_pref(oops\n# user_pref(x\n * user_pref(y\n'), [2]);
+  });
+});
+
+describe("syncCss", () => {
+  test("writes a versioned file into the copy and swaps it, removing the old one", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "gnash-scratch-"));
+    const ff = await fakeFirefox({});
+    const s = await LiveSession.open("p", await Marionette.connect(ff.port), scratch);
+    await s.syncCss("chrome", "#nav-bar { color: red }");
+    const first = ff.log.filter((l) => l.startsWith("css chrome"))[0]!.split(" ")[2]!;
+    assert.equal(readFileSync(fileURLToPath(first), "utf8"), "#nav-bar { color: red }");
+    await s.syncCss("chrome", "#nav-bar { color: green }");
+    assert.ok(!existsSync(fileURLToPath(first)), "old version removed");
+    await s.syncCss("content", "");
+    assert.ok(ff.log.includes("css content none"), "empty CSS unloads the sheet");
+    ff.kill();
+  });
+});
+
+describe("makeScratchProfile", () => {
+  test("copies prefs, layout and chrome assets but not the two CSS files", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "gnash-real-"));
+    await mkdir(join(dir, "chrome", "img"), { recursive: true });
+    await writeFile(join(dir, "prefs.js"), "p");
+    await writeFile(join(dir, "xulstore.json"), "{}");
+    await writeFile(join(dir, "chrome", "userChrome.css"), "x");
+    await writeFile(join(dir, "chrome", "userContent.css"), "x");
+    await writeFile(join(dir, "chrome", "img", "a.svg"), "<svg/>");
+    await writeFile(join(dir, "cookies.sqlite"), "private");
+    const id = "abcdef012345";
+    const scratch = await makeScratchProfile({ id, browser: "Firefox", name: "t", dir, isDefault: false, installDirs: [] });
+    assert.deepEqual((await readdir(scratch)).sort(), ["chrome", "prefs.js", "xulstore.json"]);
+    assert.deepEqual(await readdir(join(scratch, "chrome")), ["img"]);
+    await rm(scratch, { recursive: true, force: true });
   });
 });

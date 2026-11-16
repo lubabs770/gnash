@@ -134,6 +134,8 @@ describe("http security", () => {
 
   test("API needs the cookie", async () => {
     assert.equal((await fetch(`${base}/api/profiles`)).status, 401);
+    assert.equal((await fetch(`${base}/api/profiles/000000000000/events`)).status, 401);
+    assert.equal((await fetch(`${base}/api/profiles/000000000000/files`)).status, 401);
     assert.equal((await fetch(`${base}/api/profiles`, { headers: { cookie } })).status, 200);
   });
 

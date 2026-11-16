@@ -6,16 +6,16 @@ import { PrefsFile, toMap, parsePrefs, type PrefValue } from "@gnash/prefs";
 import { unifiedDiff } from "./diff.ts";
 
 export const BACKUP_DIR = ".gnash-backups";
-const KEEP_BACKUPS = 20;
+const KEEP_BACKUPS = 30;
 
 export type Change = { name: string; value: PrefValue | null };
 
 export class ConflictError extends Error {}
 export class ValidationError extends Error {}
 
-const hash = (t: string) => createHash("sha256").update(t).digest("hex");
+export const hash = (t: string) => createHash("sha256").update(t).digest("hex");
 
-async function readOptional(p: string): Promise<string> {
+export async function readOptional(p: string): Promise<string> {
   try {
     return await readFile(p, "utf8");
   } catch (e) {
@@ -63,19 +63,28 @@ export async function preview(dir: string, changes: Change[]) {
 
 /**
  * Applies changes to user.js if it still matches `expectedHash` (what the user reviewed).
- * Backs up user.js and prefs.js first, then writes atomically. Returns the backup folder name.
+ * Returns the backup folder name.
  */
 export async function apply(dir: string, changes: Change[], expectedHash: string): Promise<string> {
-  const userJs = join(dir, "user.js");
-  const before = await readOptional(userJs);
+  const before = await readOptional(join(dir, "user.js"));
   if (hash(before) !== expectedHash) throw new ConflictError("user.js changed since the preview; review again");
-  const after = applyTo(before, changes);
+  return (await writeWithBackup(dir, "user.js", applyTo(before, changes), expectedHash)).backup;
+}
+
+/**
+ * Writes `rel` (relative to the profile) if it still matches `expectedHash`.
+ * First copies it and prefs.js into .gnash-backups/<time>/, then writes atomically,
+ * through symlinks (user.js is often linked from a dotfiles repo) so the link survives.
+ */
+export async function writeWithBackup(dir: string, rel: string, text: string, expectedHash: string) {
+  const file = join(dir, rel);
+  if (hash(await readOptional(file)) !== expectedHash) throw new ConflictError(`${rel} changed on disk`);
 
   const name = new Date().toISOString().replace(/[:.]/g, "-");
   const backup = join(dir, BACKUP_DIR, name);
-  await mkdir(backup, { recursive: true });
-  for (const f of ["user.js", "prefs.js"]) {
+  for (const f of [...new Set([rel, "prefs.js"])]) {
     try {
+      await mkdir(dirname(join(backup, f)), { recursive: true });
       await copyFile(join(dir, f), join(backup, f));
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
@@ -83,13 +92,14 @@ export async function apply(dir: string, changes: Change[], expectedHash: string
   }
   await pruneBackups(join(dir, BACKUP_DIR));
 
-  // Write through symlinks (user.js is often linked from a dotfiles repo) so the link survives.
-  let target = userJs;
+  let target = file;
   try {
-    target = await realpath(userJs);
-  } catch {}
-  await atomicWrite(target, after);
-  return name;
+    target = await realpath(file);
+  } catch {
+    await mkdir(dirname(file), { recursive: true });
+  }
+  await atomicWrite(target, text);
+  return { backup: name, hash: hash(text) };
 }
 
 async function atomicWrite(file: string, text: string): Promise<void> {

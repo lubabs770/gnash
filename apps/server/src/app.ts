@@ -6,6 +6,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import type { PrefValue } from "@gnash/prefs";
 import CONTROLS from "../../../data/controls.json" with { type: "json" };
+import { isFileKey, ProfileWatcher, readFiles, saveFile, type FileKey, type FileState } from "./files.ts";
 import * as live from "./live.ts";
 import { loadDefaults } from "./omni.ts";
 import { discoverProfiles, isRunning, type Profile } from "./profiles.ts";
@@ -82,6 +83,54 @@ export function createApp(opts: AppOptions): Server {
     return p;
   }
 
+  // Server-Sent Events: one profile watcher per profile while any tab listens.
+  const listeners = new Map<string, { watcher: ProfileWatcher; clients: Set<ServerResponse> }>();
+
+  function broadcast(profileId: string, event: string, data: unknown): void {
+    for (const c of listeners.get(profileId)?.clients ?? []) c.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  }
+
+  /** Push one file to live Firefox, if live is on for this profile. */
+  async function syncLive(profileId: string, key: FileKey, text: string): Promise<live.SyncResult | { css: true } | null> {
+    const s = liveSession(false);
+    if (s?.profileId !== profileId) return null;
+    if (key === "userJs") return s.syncUserJs(text);
+    await s.syncCss(key === "userChrome" ? "chrome" : "content", text);
+    return { css: true };
+  }
+
+  async function onDiskChange(p: Profile, key: FileKey, file: FileState): Promise<void> {
+    let sync: unknown = null;
+    try {
+      sync = await syncLive(p.id, key, file.text);
+    } catch (e) {
+      sync = { error: e instanceof Error ? e.message : String(e) };
+    }
+    broadcast(p.id, "file-changed", { file: key, ...file, sync });
+  }
+
+  async function openEvents(req: IncomingMessage, res: ServerResponse, p: Profile): Promise<void> {
+    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });
+    res.write(": connected\n\n");
+    let entry = listeners.get(p.id);
+    if (!entry) {
+      const watcher = new ProfileWatcher(p.dir, (key, file) => void onDiskChange(p, key, file));
+      entry = { watcher, clients: new Set() };
+      listeners.set(p.id, entry);
+      await watcher.start();
+    }
+    entry.clients.add(res);
+    const beat = setInterval(() => (res.write(": beat\n\n"), opts.onActivity?.()), 25_000);
+    req.on("close", () => {
+      clearInterval(beat);
+      entry.clients.delete(res);
+      if (entry.clients.size === 0) {
+        entry.watcher.close();
+        listeners.delete(p.id);
+      }
+    });
+  }
+
   function liveSession(required: boolean): live.LiveSession | null {
     const s = live.current;
     if (s?.isClosed) live.setCurrent(null);
@@ -90,8 +139,8 @@ export function createApp(opts: AppOptions): Server {
   }
 
   async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
-    const m = /^\/api\/profiles\/([0-9a-f]{12})(?:\/(preview|apply|live))?$/.exec(url.pathname);
-    const liveCmd = /^\/api\/live\/(read|set|revert|keep|stop)$/.exec(url.pathname)?.[1];
+    const m = /^\/api\/profiles\/([0-9a-f]{12})(?:\/(preview|apply|live|files|files\/save|events))?$/.exec(url.pathname);
+    const liveCmd = /^\/api\/live\/(read|set|revert|keep|stop|sync)$/.exec(url.pathname)?.[1];
     if (req.method === "GET" && url.pathname === "/") {
       const nonce = randomBytes(16).toString("base64");
       const html = (await readFile(INDEX_HTML, "utf8")).replaceAll("<script>", `<script nonce="${nonce}">`);
@@ -116,12 +165,30 @@ export function createApp(opts: AppOptions): Server {
       const s = liveSession(false);
       if (s?.profileId !== p.id) {
         await live.stopCurrent();
-        if (await isRunning(p).catch(() => false)) {
-          throw new HttpError(409, "Firefox is already running with this profile. Quit it, then Go live.");
-        }
-        live.setCurrent(await live.launchLive(p));
+        const started = await live.launchLive(p);
+        live.setCurrent(started);
+        // The copy applied user.js itself at startup; CSS comes only from gnash so edits fully replace it.
+        const files = await readFiles(p.dir);
+        started.primeUserJs(files.userJs.text);
+        await started.syncCss("chrome", files.userChrome.text);
+        await started.syncCss("content", files.userContent.text);
       }
       send(res, 200, { active: true, profileId: p.id });
+    } else if (req.method === "GET" && url.pathname === "/api/live/screenshot") {
+      send(res, 200, { png: await liveSession(true)!.screenshot() });
+    } else if (req.method === "GET" && m?.[2] === "events") {
+      await openEvents(req, res, await findProfile(m[1]!));
+    } else if (req.method === "GET" && m?.[2] === "files") {
+      send(res, 200, await readFiles((await findProfile(m[1]!)).dir));
+    } else if (req.method === "POST" && m?.[2] === "files/save") {
+      const body = await readJson(req);
+      const p = await findProfile(m[1]!);
+      if (!isFileKey(body.file) || typeof body.text !== "string" || typeof body.hash !== "string" || body.text.length > 2_000_000) {
+        throw new HttpError(400, "expected file, text and hash");
+      }
+      const saved = await saveFile(p.dir, body.file, body.text, body.hash);
+      listeners.get(p.id)?.watcher.note(body.file, saved.hash);
+      send(res, 200, saved);
     } else if (req.method === "POST" && liveCmd) {
       const body = await readJson(req);
       if (liveCmd === "stop") {
@@ -129,7 +196,12 @@ export function createApp(opts: AppOptions): Server {
         return send(res, 200, { active: false });
       }
       const s = liveSession(true)!;
-      if (liveCmd === "set") {
+      if (liveCmd === "sync") {
+        if (!isFileKey(body.file) || typeof body.text !== "string" || body.text.length > 2_000_000) {
+          throw new HttpError(400, "expected file and text");
+        }
+        send(res, 200, await syncLive(s.profileId, body.file, body.text));
+      } else if (liveCmd === "set") {
         const [c] = validateChanges([{ name: body.name, value: body.value }]);
         await s.set(c!.name, c!.value);
         send(res, 200, { ok: true });
