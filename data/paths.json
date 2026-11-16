@@ -1,0 +1,12 @@
+{
+  "Firefox": {
+    "darwin": ["~/Library/Application Support/Firefox"],
+    "linux": [
+      "~/.mozilla/firefox",
+      "~/.config/mozilla/firefox",
+      "~/.var/app/org.mozilla.firefox/.mozilla/firefox",
+      "~/snap/firefox/common/.mozilla/firefox"
+    ],
+    "win32": ["%APPDATA%/Mozilla/Firefox"]
+  }
+}

@@ -3,13 +3,16 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "test": "node --test \"packages/*/src/**/*.test.ts\"",
+    "start": "node apps/server/src/main.ts",
+    "dev": "node --watch apps/server/src/main.ts --no-open",
+    "test": "node --test \"packages/*/src/**/*.test.ts\" \"apps/*/src/**/*.test.ts\"",
     "typecheck": "tsc"
   },
   "devDependencies": {

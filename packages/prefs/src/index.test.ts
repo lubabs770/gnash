@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { PrefsFile, SECTION_MARKER } from "./index.ts";
+import { parsePrefs, PrefsFile, SECTION_MARKER } from "./index.ts";
 
 const USER_JS = [
   "// my user.js",
@@ -85,7 +85,28 @@ describe("PrefsFile", () => {
     assert.equal(f.get("hidden"), undefined);
   });
 
+  test("multi-line statements parse, edit and remove", () => {
+    const text = '// x\nuser_pref("long",\n  "value");\nuser_pref("next", 1);\n';
+    const f = new PrefsFile(text);
+    assert.equal(f.get("long"), "value");
+    f.set("long", "v2");
+    assert.equal(f.toString(), '// x\nuser_pref("long", "v2");\nuser_pref("next", 1);\n');
+    const g = new PrefsFile(text);
+    g.remove("long");
+    assert.equal(g.toString(), '// x\nuser_pref("next", 1);\n');
+  });
+
   test("rejects non-integer numbers", () => {
     assert.throws(() => new PrefsFile("").set("f", 1.5));
+  });
+});
+
+describe("parsePrefs", () => {
+  test("reads default-file syntax", () => {
+    const prefs = parsePrefs('pref("a", 1);\nsticky_pref("b", true);\npref("c", "x", locked);\n#ifdef X\nlockPref("d", false);\n');
+    assert.deepEqual(
+      prefs.map((p) => [p.kind, p.name, p.value]),
+      [["pref", "a", 1], ["sticky_pref", "b", true], ["pref", "c", "x"], ["lockPref", "d", false]],
+    );
   });
 });

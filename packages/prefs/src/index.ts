@@ -1,63 +1,64 @@
-// Parser and editor for Firefox prefs.js / user.js.
-// Keeps the original text and edits only the spans it must, so
-// toString() of an unedited file is byte-identical to the input.
+// Parser and editor for Firefox prefs files (prefs.js, user.js, default pref files).
+// PrefsFile keeps the original text and splices only the spans it edits,
+// so toString() of an unedited file is byte-identical to the input.
 
 export type PrefValue = string | number | boolean;
+export type PrefKind = "user_pref" | "pref" | "sticky_pref" | "lockPref";
 
 export interface Pref {
+  kind: PrefKind;
   name: string;
   value: PrefValue;
-  /** 0-based line index */
-  line: number;
-  /** character span of the statement within the line */
+  /** character span of the whole statement in the text */
   start: number;
   end: number;
 }
 
 export const SECTION_MARKER = "// --- added by gnash ---";
 
-const STR = String.raw`"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'`;
+const STR = String.raw`"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'`;
 const STMT = new RegExp(
-  String.raw`\buser_pref\s*\(\s*(${STR})\s*,\s*(${STR}|true|false|[+-]?\d+)\s*\)\s*;?`,
+  String.raw`\b(user_pref|pref|sticky_pref|lockPref)\s*\(\s*(${STR})\s*,\s*(${STR}|true|false|[+-]?\d+)` +
+    String.raw`(?:\s*,\s*(?:locked|sticky))*\s*\)\s*;?`,
   "g",
 );
 
-/** Blank out comments (keeping string contents and column positions). */
-function maskComments(line: string, inBlock: boolean): { code: string; inBlock: boolean } {
-  let code = "";
+/** Replace comments with spaces, keeping newlines, string contents and every offset. */
+function maskComments(text: string): string {
+  let out = "";
   let quote: string | null = null;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i]!;
-    const n = line[i + 1];
-    if (inBlock) {
+  let comment: "line" | "block" | null = null;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    const n = text[i + 1];
+    if (comment === "line") {
+      if (c === "\n") comment = null;
+      out += c === "\n" ? c : " ";
+    } else if (comment === "block") {
       if (c === "*" && n === "/") {
-        inBlock = false;
-        code += "  ";
+        comment = null;
+        out += "  ";
         i++;
-      } else code += " ";
-      continue;
-    }
-    if (quote) {
-      code += c;
+      } else out += c === "\n" ? c : " ";
+    } else if (quote) {
+      out += c;
       if (c === "\\" && n !== undefined) {
-        code += n;
+        out += n;
         i++;
-      } else if (c === quote) quote = null;
-      continue;
-    }
-    if (c === '"' || c === "'") {
+      } else if (c === quote || c === "\n") quote = null;
+    } else if (c === '"' || c === "'") {
       quote = c;
-      code += c;
+      out += c;
     } else if (c === "/" && n === "*") {
-      inBlock = true;
-      code += "  ";
+      comment = "block";
+      out += "  ";
       i++;
     } else if ((c === "/" && n === "/") || c === "#") {
-      code += " ".repeat(line.length - i);
-      break;
-    } else code += c;
+      comment = "line";
+      out += " ";
+    } else out += c;
   }
-  return { code, inBlock };
+  return out;
 }
 
 function decodeString(lit: string): string {
@@ -74,10 +75,26 @@ function decodeValue(lit: string): PrefValue {
   return parseInt(lit, 10);
 }
 
+/** All pref statements in file order, duplicates included; commented-out ones are skipped. */
+export function parsePrefs(text: string): Pref[] {
+  return [...maskComments(text).matchAll(STMT)].map((m) => ({
+    kind: m[1] as PrefKind,
+    name: decodeString(m[2]!),
+    value: decodeValue(m[3]!),
+    start: m.index!,
+    end: m.index! + m[0].length,
+  }));
+}
+
+/** Last occurrence wins, as in Firefox. */
+export function toMap(prefs: readonly Pref[]): Map<string, PrefValue> {
+  return new Map(prefs.map((p) => [p.name, p.value]));
+}
+
 export function formatValue(value: PrefValue): string {
   if (typeof value === "string") return JSON.stringify(value);
   if (typeof value === "boolean") return String(value);
-  if (!Number.isInteger(value)) throw new TypeError(`Firefox int prefs must be integers, got ${value}`);
+  if (!Number.isSafeInteger(value)) throw new TypeError(`Firefox int prefs must be integers, got ${value}`);
   return String(value);
 }
 
@@ -85,39 +102,17 @@ export function formatPref(name: string, value: PrefValue): string {
   return `user_pref(${JSON.stringify(name)}, ${formatValue(value)});`;
 }
 
-/** Split into [content, terminator] pairs so any line ending survives untouched. */
-function splitLines(text: string): { content: string; eol: string }[] {
-  return (text.match(/[^\n]*\n|[^\n]+$/g) ?? []).map((raw) => {
-    const m = /\r?\n$/.exec(raw);
-    return m ? { content: raw.slice(0, m.index), eol: m[0] } : { content: raw, eol: "" };
-  });
-}
-
 export class PrefsFile {
-  private lines: { content: string; eol: string }[];
-  private parsed: Pref[] = [];
+  private text: string;
+  private parsed: Pref[];
 
   constructor(text: string) {
-    this.lines = splitLines(text);
-    this.reparse();
+    this.text = text;
+    this.parsed = parsePrefs(text);
   }
 
-  private reparse(): void {
-    this.parsed = [];
-    let inBlock = false;
-    this.lines.forEach(({ content }, line) => {
-      const masked = maskComments(content, inBlock);
-      inBlock = masked.inBlock;
-      for (const m of masked.code.matchAll(STMT)) {
-        this.parsed.push({
-          name: decodeString(m[1]!),
-          value: decodeValue(m[2]!),
-          line,
-          start: m.index!,
-          end: m.index! + m[0].length,
-        });
-      }
-    });
+  private splice(start: number, end: number, insert = ""): void {
+    this.text = this.text.slice(0, start) + insert + this.text.slice(end);
   }
 
   /** Every statement in file order, duplicates included. */
@@ -125,54 +120,49 @@ export class PrefsFile {
     return this.parsed;
   }
 
-  /** Effective prefs: the last occurrence of a name wins, as in Firefox. */
   get prefs(): Map<string, PrefValue> {
-    return new Map(this.parsed.map((p) => [p.name, p.value]));
+    return toMap(this.parsed);
   }
 
   get(name: string): PrefValue | undefined {
     return this.prefs.get(name);
   }
 
-  /** Update every occurrence in place, or append under the gnash section. */
+  /** Rewrite every occurrence in place, or append under the gnash section. */
   set(name: string, value: PrefValue): void {
     const stmt = formatPref(name, value);
     const hits = this.parsed.filter((p) => p.name === name);
     if (hits.length) {
-      for (const p of [...hits].reverse()) {
-        const l = this.lines[p.line]!;
-        l.content = l.content.slice(0, p.start) + stmt + l.content.slice(p.end);
-      }
+      for (const p of hits.reverse()) this.splice(p.start, p.end, stmt);
     } else {
-      const eol = this.lines.find((l) => l.eol)?.eol ?? "\n";
-      const last = this.lines.at(-1);
-      if (last && !last.eol) last.eol = eol;
-      if (!this.lines.some((l) => l.content.trim() === SECTION_MARKER)) {
-        if (this.lines.length) this.lines.push({ content: "", eol });
-        this.lines.push({ content: SECTION_MARKER, eol });
+      const eol = this.text.includes("\r\n") ? "\r\n" : "\n";
+      if (this.text && !this.text.endsWith("\n")) this.text += eol;
+      if (!this.text.split(/\r?\n/).some((l) => l.trim() === SECTION_MARKER)) {
+        this.text += (this.text ? eol : "") + SECTION_MARKER + eol;
       }
-      this.lines.push({ content: stmt, eol });
+      this.text += stmt + eol;
     }
-    this.reparse();
+    this.parsed = parsePrefs(this.text);
   }
 
-  /** Remove every occurrence. A line left with no code (only a comment) goes too. */
+  /** Remove every occurrence. A line left with no code (only a `//` comment) goes too. */
   remove(name: string): boolean {
     const hits = this.parsed.filter((p) => p.name === name);
-    const drop = new Set<number>();
     for (const p of [...hits].reverse()) {
-      const l = this.lines[p.line]!;
-      l.content = l.content.slice(0, p.start) + l.content.slice(p.end);
-      const rest = l.content.trim();
-      // Only drop lines left empty or holding a `//`/`#` comment; a `/*` must stay to keep block structure.
-      if (rest === "" || ((rest.startsWith("//") || rest.startsWith("#")) && !rest.includes("/*"))) drop.add(p.line);
+      const lineStart = this.text.lastIndexOf("\n", p.start - 1) + 1;
+      const nl = this.text.indexOf("\n", p.end);
+      const lineEnd = nl === -1 ? this.text.length : nl + 1;
+      const rest = (this.text.slice(lineStart, p.start) + this.text.slice(p.end, lineEnd)).trim();
+      // A leftover `/*` must stay, or the block comment it opens would swallow later lines.
+      const dropLine = rest === "" || ((rest.startsWith("//") || rest.startsWith("#")) && !rest.includes("/*"));
+      if (dropLine) this.splice(lineStart, lineEnd);
+      else this.splice(p.start, p.end);
     }
-    this.lines = this.lines.filter((_, i) => !drop.has(i));
-    this.reparse();
+    this.parsed = parsePrefs(this.text);
     return hits.length > 0;
   }
 
   toString(): string {
-    return this.lines.map((l) => l.content + l.eol).join("");
+    return this.text;
   }
 }
