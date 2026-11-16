@@ -1,7 +1,7 @@
 // Live mode: drive a scratch copy of the profile in a real Firefox through Marionette
 // (its remote-control protocol), so prefs and CSS changes show up immediately.
 import { spawn } from "node:child_process";
-import { appendFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -264,14 +264,13 @@ export class LiveSession {
     if (prev) await rm(prev, { force: true });
   }
 
-  /** Load a page in the copy's current tab (to try userContent.css on a real site). */
+  /** Load a page in the tab you're looking at in the copy (to try userContent.css on a real site). */
   async navigate(url: string): Promise<void> {
-    await this.m.command("Marionette:SetContext", { value: "content" });
-    try {
-      await this.m.command("WebDriver:Navigate", { url });
-    } finally {
-      await this.m.command("Marionette:SetContext", { value: "chrome" });
-    }
+    // Marionette's own Navigate targets the tab the session started in, not the selected one.
+    await this.exec(
+      `const w = Services.wm.getMostRecentWindow("navigator:browser"); w.openTrustedLinkIn(arguments[0], "current"); return true;`,
+      [url],
+    );
   }
 
   /** PNG (base64) of the front browser window, chrome included. */
@@ -318,7 +317,7 @@ export function firefoxBinary(p: Profile): string | undefined {
   return join(dir, process.platform === "win32" ? "firefox.exe" : "firefox");
 }
 
-const COPY = ["prefs.js", "user.js", "xulstore.json", "containers.json", "extensions.json", "extensions", "chrome"];
+const COPY = ["prefs.js", "user.js", "xulstore.json", "containers.json", "extensions.json", "extensions", "chrome", "browser-extension-data"];
 
 /**
  * Fresh scratch copy of the profile's look-and-feel: prefs, toolbar layout, extensions, chrome/ assets.
@@ -335,6 +334,12 @@ export async function makeScratchProfile(p: Profile): Promise<string> {
     }).catch((e: NodeJS.ErrnoException) => {
       if (e.code !== "ENOENT") throw e;
     });
+  }
+  // Extensions' own saved settings (storage.local), so they don't act freshly installed and open welcome tabs.
+  // Only moz-extension folders: website storage (cookies, logins, site data) stays out of the copy.
+  const storage = join(p.dir, "storage", "default");
+  for (const d of await readdir(storage).catch(() => [] as string[])) {
+    if (d.startsWith("moz-extension+++")) await cp(join(storage, d), join(scratch, "storage", "default", d), { recursive: true });
   }
   // Port 0: Firefox picks a free port and writes it to MarionetteActivePort, so several live
   // copies (or another Marionette user) never fight over the default 2828.

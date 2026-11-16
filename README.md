@@ -29,7 +29,7 @@ with a backup.
 assets) in a second Firefox window with remote control on. Every edit shows up there
 as you type, whether you type in gnash or save from your own editor: gnash watches the
 files. Your everyday Firefox keeps running and isn't touched; nothing reaches your
-real profile until you save. Closing the live copy quits it and deletes the copy.
+real profile until you save. Closing the live copy quits it and deletes the copy. The Studio's preview pane shows that window, refreshing about once a second, with its own address box for opening pages in the copy.
 The copy shows a robot icon and striped address bar (Firefox's remote-control mode),
 and while it's open, other programs on your computer could also control it.
 
@@ -43,7 +43,9 @@ claude mcp add gnash -- node /path/to/gnash/apps/server/src/mcp.ts
 ```
 
 The MCP server finds the running gnash through `~/.gnash/session.json` (owner-only;
-it holds the session token), and starts gnash if it isn't running. Tools: `status`,
+it holds the session token), and starts gnash if it isn't running. Unsaved drafts are kept in
+`~/.gnash/drafts.json`, and a restarted gnash reuses its port and token, so restarts
+don't lose work and open tabs reconnect. Tools: `status`,
 `read_file`, `write_file`, `edit_file`, `save_file`, `search_prefs`, `live`,
 `open_page`, `screenshot`.
 

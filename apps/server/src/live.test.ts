@@ -182,9 +182,13 @@ describe("makeScratchProfile", () => {
     await writeFile(join(dir, "chrome", "userContent.css"), "x");
     await writeFile(join(dir, "chrome", "img", "a.svg"), "<svg/>");
     await writeFile(join(dir, "cookies.sqlite"), "private");
+    await mkdir(join(dir, "storage", "default", "moz-extension+++abc", "idb"), { recursive: true });
+    await writeFile(join(dir, "storage", "default", "moz-extension+++abc", "idb", "x.sqlite"), "ext");
+    await mkdir(join(dir, "storage", "default", "https+++bank.example"), { recursive: true });
     const id = "abcdef012345";
     const scratch = await makeScratchProfile({ id, browser: "Firefox", name: "t", dir, isDefault: false, installDirs: [] });
-    assert.deepEqual((await readdir(scratch)).sort(), ["chrome", "prefs.js", "user.js", "xulstore.json"]);
+    assert.deepEqual((await readdir(scratch)).sort(), ["chrome", "prefs.js", "storage", "user.js", "xulstore.json"]);
+    assert.deepEqual(await readdir(join(scratch, "storage", "default")), ["moz-extension+++abc"], "extension storage only, no site data");
     assert.match(readFileSync(join(scratch, "user.js"), "utf8"), /user_pref\("marionette.port", 0\);/);
     assert.deepEqual(await readdir(join(scratch, "chrome")), ["img"]);
     await rm(scratch, { recursive: true, force: true });

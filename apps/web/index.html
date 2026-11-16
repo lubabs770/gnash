@@ -219,6 +219,16 @@
   .livecard p { margin: 0; color: var(--muted); font-size: 13px; }
   .shot { width: 100%; border-radius: 8px; border: 1px solid var(--line); background: var(--soft); display: block; cursor: zoom-in; min-height: 120px; object-fit: contain; }
   .shot.big { position: fixed; inset: 16px; width: calc(100% - 32px); height: calc(100% - 32px); z-index: 8; cursor: zoom-out; box-shadow: 0 20px 60px rgb(0 0 0 / .4); background: var(--panel); }
+  .studio2.wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); }
+  .pv-head { display: flex; align-items: center; gap: 6px; }
+  .pv-head h2 { display: flex; align-items: center; gap: 8px; }
+  .pv-dot { background: var(--live); opacity: 1; animation: pulse 1.6s infinite; color: var(--live); }
+  .pv-btn { padding: 3px 9px; font-size: 12.5px; }
+  .pv-btn[aria-pressed=true] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .pv-url { display: flex; gap: 6px; }
+  .pv-url input { flex: 1; font: 12.5px ui-monospace, Menlo, monospace; }
+  .pv-foot { display: flex; align-items: center; gap: 8px; }
+  .livecard .shot { max-height: calc(100vh - 290px); }
   .livestat { font: 12.5px ui-monospace, Menlo, monospace; color: var(--muted); }
   .livestat b { color: var(--live); font-weight: 600; }
   @media (max-width: 900px) {
@@ -894,10 +904,11 @@ async function discard() {
 const FILE_LABEL = { userJs: "user.js", userChrome: "userChrome.css", userContent: "userContent.css" };
 const STYLESHEETS_PREF = "toolkit.legacyUserProfileCustomizations.stylesheets";
 const CLIENT = Math.random().toString(36).slice(2); // tells our own draft events apart from an agent's
-const studio = { files: null, cur: "userJs", sync: {}, syncTimer: 0, shotBusy: false, shotAgain: false, shot: "", es: null, names: [], ac: null };
+const studio = { auto: store.get("gnash.pvAuto") !== "0", wide: store.get("gnash.pvWide") === "1", shotAt: 0, files: null, cur: "userJs", sync: {}, syncTimer: 0, shotBusy: false, shotAgain: false, shot: "", es: null, names: [], ac: null };
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 const span = (cls, s) => `<span class="${cls}">${esc(s)}</span>`;
 const ta = () => $("#edTa");
+if (studio.wide) $(".studio2").classList.add("wide");
 
 async function loadFiles() {
   if (!state.id) return;
@@ -1125,6 +1136,7 @@ async function requestShot() {
     await new Promise((r) => setTimeout(r, 120)); // let Firefox repaint
     const { png } = await api("/api/live/screenshot");
     studio.shot = `data:image/png;base64,${png}`;
+    studio.shotAt = Date.now();
     const img = $("#shot");
     if (img) img.src = studio.shot;
   } catch (e) { if (e.status === 410) liveFailed(e); }
@@ -1157,21 +1169,47 @@ function revertCur() {
   scheduleSync(0);
 }
 
+/** The preview pane. Built once per live state so typing in its URL box survives re-renders. */
 function renderLiveCard() {
   const c = $("#livecard");
+  const mode = state.live ? "live" : "off";
+  if (c.dataset.mode === mode) return;
+  c.dataset.mode = mode;
   if (!state.live) {
-    c.replaceChildren(el("h2", {}, "See it live"),
-      el("p", {}, "Open a copy of this profile in a second Firefox window. Every keystroke in user.js, userChrome.css and userContent.css shows up there, whether you type here or save from your own editor. Your everyday Firefox isn't touched."),
+    c.replaceChildren(el("h2", {}, "Preview"),
+      el("p", {}, "Open a copy of this profile in a second Firefox window and watch it here. Every keystroke in user.js, userChrome.css and userContent.css shows up there, whether you type here, save from your own editor, or an agent edits. Your everyday Firefox isn't touched."),
       el("div", {}, el("button", { class: "primary", onclick: () => state.id ? $("#liveDlg").showModal() : toast("Pick a profile first.") }, "Open live copy")));
     return;
   }
-  const img = el("img", { id: "shot", class: "shot", alt: "Screenshot of the live Firefox copy", title: "Click to enlarge", onclick: () => img.classList.toggle("big") });
+  const url = el("input", { type: "text", id: "pvUrl", placeholder: "Open a page in the live copy…", "aria-label": "Page to open in the live copy", autocomplete: "off", spellcheck: "false" });
+  const go = async () => {
+    let u = url.value.trim();
+    if (!u) return;
+    if (!/^(https?:\/\/|about:)/.test(u)) u = `https://${u}`;
+    try { await api("/api/live/open", { url: u }); url.blur(); setTimeout(requestShot, 900); setTimeout(requestShot, 2500); }
+    catch (e) { toast(e.message); }
+  };
+  url.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  const auto = el("button", { class: "pv-btn", "aria-pressed": String(studio.auto), title: "Refresh the preview every second or so",
+    onclick: () => { studio.auto = !studio.auto; auto.setAttribute("aria-pressed", String(studio.auto)); store.set("gnash.pvAuto", studio.auto ? "1" : "0"); } }, "Auto");
+  const wide = el("button", { class: "pv-btn", "aria-pressed": String(studio.wide), title: "Give the preview more room",
+    onclick: () => { studio.wide = !studio.wide; wide.setAttribute("aria-pressed", String(studio.wide)); $(".studio2").classList.toggle("wide", studio.wide); store.set("gnash.pvWide", studio.wide ? "1" : "0"); } }, "Wide");
+  const img = el("img", { id: "shot", class: "shot", alt: "Live view of the Firefox copy", title: "Click to enlarge", onclick: () => img.classList.toggle("big") });
   if (studio.shot) img.src = studio.shot;
-  c.replaceChildren(el("h2", {}, "Live copy"),
-    el("p", {}, "The second Firefox window updates as you type. This is a snapshot of it."),
+  c.replaceChildren(
+    el("div", { class: "pv-head" }, el("h2", {}, el("span", { class: "dot pv-dot" }), "Preview"), el("div", { class: "grow" }), auto, wide,
+      el("button", { class: "pv-btn", title: "Refresh now", "aria-label": "Refresh preview", onclick: requestShot }, "↻")),
+    el("div", { class: "pv-url" }, url, el("button", { onclick: go }, "Open")),
     img,
-    el("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, el("button", { onclick: requestShot }, "Refresh snapshot"), el("button", { onclick: () => leaveLive() }, "Close live copy")));
+    el("div", { class: "pv-foot" }, el("span", { id: "pvAge", class: "livestat" }, ""), el("div", { class: "grow" }), el("button", { class: "link", onclick: () => leaveLive() }, "Close live copy")));
 }
+
+// Keep the preview fresh while it's on screen: one capture at a time, roughly every 1.2s.
+setInterval(() => {
+  if (state.live && studio.auto && state.view === "studio" && document.visibilityState === "visible") requestShot();
+  const age = $("#pvAge");
+  if (age && studio.shotAt) { const s = Math.round((Date.now() - studio.shotAt) / 1000); age.textContent = s < 2 ? "updated just now" : `updated ${s}s ago`; }
+}, 1200);
 
 // Scroll the highlight layer and gutter with the textarea.
 function syncScroll() {

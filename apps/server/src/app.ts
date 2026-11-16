@@ -21,6 +21,9 @@ export interface AppOptions {
   /** Called on every authorized request; used for the idle shutdown. */
   onActivity?: () => void;
   profiles?: () => Promise<Profile[]>;
+  /** Unsaved drafts to start from, and a hook to persist them when they change. */
+  drafts?: Map<string, string>;
+  onDraftsChange?: (drafts: Map<string, string>) => void;
 }
 
 class HttpError extends Error {
@@ -86,7 +89,7 @@ export function createApp(opts: AppOptions): Server {
   // Server-Sent Events: one profile watcher per profile while any tab listens.
   const listeners = new Map<string, { watcher: ProfileWatcher; clients: Set<ServerResponse> }>();
   /** Unsaved edits per profile+file, from the gnash editor or an agent; what "the current text" means. */
-  const drafts = new Map<string, string>();
+  const drafts = opts.drafts ?? new Map<string, string>();
   /** Profile most recently opened in a gnash tab; agents default to it. */
   let focusProfile: string | null = null;
 
@@ -208,6 +211,7 @@ export function createApp(opts: AppOptions): Server {
       const key = `${p.id}:${body.file}`;
       if (body.text === (await readFiles(p.dir))[body.file].text) drafts.delete(key);
       else drafts.set(key, body.text);
+      opts.onDraftsChange?.(drafts);
       let sync: unknown = null;
       try {
         sync = await syncLive(p.id, body.file, body.text);
@@ -227,6 +231,7 @@ export function createApp(opts: AppOptions): Server {
       const saved = await saveFile(p.dir, body.file, body.text, body.hash);
       listeners.get(p.id)?.watcher.note(body.file, saved.hash);
       drafts.delete(`${p.id}:${body.file}`);
+      opts.onDraftsChange?.(drafts);
       broadcast(p.id, "saved", { file: body.file, text: body.text, hash: saved.hash });
       send(res, 200, saved);
     } else if (req.method === "POST" && liveCmd) {
